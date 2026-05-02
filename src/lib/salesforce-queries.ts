@@ -362,3 +362,49 @@ export async function getHolidays(): Promise<SFHoliday[]> {
     ORDER BY Date__c ASC
   `);
 }
+
+// ============================================
+// History Record Queries
+// ============================================
+
+export async function getHistoryRecords(employeeId: string) {
+  try {
+    const records = await query<{
+      Id: string;
+      Date__c: string;
+      Type__c: string;
+      Description__c: string;
+    }>(`SELECT Id, Date__c, Type__c, Description__c FROM HistoryRecord__c WHERE Employee__c = '${employeeId}' ORDER BY Date__c DESC`);
+    
+    return records.map(r => ({
+      id: r.Id,
+      date: r.Date__c,
+      type: r.Type__c,
+      description: r.Description__c
+    }));
+  } catch (error) {
+    console.warn("Error querying HistoryRecord__c (Object may not be deployed yet). Falling back to empty array.", error);
+    return [];
+  }
+}
+
+export async function createHistoryRecord(data: {
+  employeeId: string;
+  date: string;
+  type: string;
+  description: string;
+}) {
+  try {
+    const conn = await getSalesforceConnection();
+    const result = await conn.sobject("HistoryRecord__c").create({
+      Employee__c: data.employeeId,
+      Date__c: data.date,
+      Type__c: data.type,
+      Description__c: data.description,
+    });
+    return result.id;
+  } catch (error) {
+    console.error("Error creating HistoryRecord__c in Salesforce:", error);
+    return null;
+  }
+}

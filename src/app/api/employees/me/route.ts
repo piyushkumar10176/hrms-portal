@@ -35,8 +35,11 @@ export async function GET(req: NextRequest) {
       role: session.user.role // Preserve role from session
     };
 
-    // Get mock history for now
-    const history = db.getHistory(session.user.id);
+    // Try to get history from Salesforce first, fallback to mock data if it fails
+    const { getHistoryRecords } = await import("@/lib/salesforce-queries");
+    const sfHistory = await getHistoryRecords(session.user.employeeId);
+    let history = sfHistory.length > 0 ? sfHistory : db.getHistory(session.user.id);
+    
     return NextResponse.json({ employee: emp, history });
 
   } catch (error) {
