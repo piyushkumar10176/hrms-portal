@@ -6,7 +6,7 @@ import { getAllEmployees } from "@/lib/salesforce-queries";
 
 export async function GET() {
   const session = await auth();
-  if (!session?.user || session.user.role !== "admin") {
+  if (!session?.user) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

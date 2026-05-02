@@ -18,7 +18,13 @@ export default auth((req) => {
 
   // Admin-only routes
   if (pathname.startsWith("/admin") || pathname.startsWith("/api/employees")) {
-    if (req.auth.user?.role !== "admin" && !pathname.endsWith("/me")) {
+    // Exceptions for employees:
+    // 1. My Team page (/admin/employees)
+    // 2. Employee API to fetch team (/api/employees)
+    // 3. Employee API me endpoint (/api/employees/me)
+    const isException = pathname === "/admin/employees" || pathname === "/api/employees" || pathname.endsWith("/me");
+    
+    if (req.auth.user?.role !== "admin" && !isException) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }
