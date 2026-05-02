@@ -17,10 +17,9 @@ const NAV_ITEMS = [
     ]
   },
   { label: "Inbox", href: "/approvals", icon: "📥", roles: ["admin"] },
-  { label: "My Team", href: "/team", icon: "👥", roles: ["admin"] },
+  { label: "My Team", href: "/admin/employees", icon: "👥", roles: ["admin"] },
   { label: "My Finances", href: "/payroll", icon: "💰", roles: ["admin", "employee"] },
   { label: "Org", href: "/organisation", icon: "🏢", roles: ["admin", "employee"] },
-  { label: "Employees", href: "/admin/employees", icon: "👥", roles: ["admin"] },
 ];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
