@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/mock-data";
-import { getAllEmployees as getAllSFEmployees, createRecord } from "@/lib/salesforce";
+import { createRecord } from "@/lib/salesforce";
 import { getAllEmployees } from "@/lib/salesforce-queries";
 
 export async function GET() {
