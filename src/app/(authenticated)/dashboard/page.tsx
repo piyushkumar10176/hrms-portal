@@ -16,6 +16,7 @@ export default function DashboardPage() {
   const [holidays, setHolidays] = useState<{ name: string; date: string }[]>([]);
   const [birthdays, setBirthdays] = useState<{ employee: { firstName: string; lastName: string; department: string }; daysAway: number }[]>([]);
   const [teamOnLeave, setTeamOnLeave] = useState<{ name: string; leaveType: string }[]>([]);
+  const [directReportsLeaves, setDirectReportsLeaves] = useState<any[]>([]);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
@@ -40,6 +41,7 @@ export default function DashboardPage() {
       setPendingCount((approvals.approvals || []).length);
       setBirthdays(dash.birthdays || []);
       setTeamOnLeave(dash.teamOnLeave || []);
+      setDirectReportsLeaves(dash.directReportsLeaves || []);
     }).catch(() => {});
   }, []);
 
@@ -205,6 +207,47 @@ export default function DashboardPage() {
             )}
           </div>
         </div>
+        {/* Manager Leave Dashboard (Only visible to managers) */}
+        {directReportsLeaves.length > 0 && (
+          <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5 mt-6">
+            <h3 className="font-semibold text-gray-900 mb-4">👑 Manager Dashboard: Team Leaves</h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-gray-50 text-gray-500 font-medium border-b border-gray-200">
+                  <tr>
+                    <th className="px-4 py-3 rounded-tl-lg">Employee</th>
+                    <th className="px-4 py-3 text-center">Total Used</th>
+                    <th className="px-4 py-3">Leave Breakdown</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {directReportsLeaves.map((report: any) => (
+                    <tr key={report.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-gray-900">{report.name}</div>
+                        <div className="text-xs text-gray-500">{report.designation}</div>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center justify-center px-2 py-1 rounded-full text-xs font-medium ${report.usedLeaves > 15 ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {report.usedLeaves} / {report.totalLeaves} days
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex gap-2 flex-wrap">
+                          {report.balances.map((b: any) => (
+                            <span key={b.code} title={b.leaveType} className="text-xs px-2 py-1 rounded border border-gray-200 bg-white">
+                              {b.code}: <strong className={b.used > 0 ? "text-gray-900" : "text-gray-400"}>{b.used}</strong>/{b.total}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

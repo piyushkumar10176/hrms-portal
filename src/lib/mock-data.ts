@@ -29,6 +29,7 @@ export interface Employee {
   ifscCode?: string;
   panNumber?: string;
   aadharNumber?: string;
+  inviteToken?: string;
 }
 
 export interface Salary {
@@ -188,6 +189,14 @@ class DataStore {
     const e = this.employees.find(x => x.id === id);
     if (!e || e.password !== oldPw) return false;
     e.password = newPw;
+    this.save("employees", this.employees);
+    return true;
+  }
+  setEmployeePasswordByToken(token: string, newPw: string): boolean {
+    const e = this.employees.find(x => x.inviteToken === token);
+    if (!e) return false;
+    e.password = newPw;
+    e.inviteToken = undefined;
     this.save("employees", this.employees);
     return true;
   }

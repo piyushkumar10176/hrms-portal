@@ -17,6 +17,8 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
+  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  
   const emp = db.addEmployee({
     employeeId: `EMP${String(db.getAllEmployees().length + 1).padStart(3, "0")}`,
     firstName: body.firstName,
@@ -29,12 +31,22 @@ export async function POST(req: NextRequest) {
     reportingManagerId: body.reportingManagerId || "1",
     role: body.role || "employee",
     status: "Active",
-    password: body.password || "emp123",
+    password: "", // Empty until they set it via invite
+    inviteToken: token,
     gender: body.gender,
     city: body.city,
     dateOfBirth: body.dateOfBirth,
     address: body.address,
   });
 
-  return NextResponse.json({ employee: emp }, { status: 201 });
+  const inviteLink = `${req.headers.get("origin")}/setup-password/${token}`;
+  
+  // Mock Email Sending
+  console.log(`\n============================`);
+  console.log(`📧 MOCK EMAIL SENT TO: ${emp.email}`);
+  console.log(`Subject: Welcome to HRMS! Please setup your account`);
+  console.log(`Body: Click here to set your password and log in: ${inviteLink}`);
+  console.log(`============================\n`);
+
+  return NextResponse.json({ employee: emp, inviteLink }, { status: 201 });
 }

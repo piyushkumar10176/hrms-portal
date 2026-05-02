@@ -50,7 +50,12 @@ export default function AdminEmployeesPage() {
       fetchEmployees();
       setShowForm(false);
       setEditingId(null);
-      setMsg({text: `${data.employee.firstName} ${editingId ? "updated" : "added"} successfully!`, type: "success"});
+      setMsg({
+        text: data.inviteLink 
+          ? `Added ${data.employee.firstName}! An email was sent. Invite Link: ${data.inviteLink}` 
+          : `${data.employee.firstName} ${editingId ? "updated" : "added"} successfully!`, 
+        type: "success"
+      });
     } else { setMsg({text: data.error, type: "error"}); }
   };
 
