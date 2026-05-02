@@ -36,14 +36,80 @@ export async function getSalesforceConnection(): Promise<Connection> {
   const loginUrl = process.env.SF_LOGIN_URL || "https://login.salesforce.com";
   const clientId = process.env.SF_CLIENT_ID;
   const clientSecret = process.env.SF_CLIENT_SECRET;
+  const refreshToken = process.env.SF_REFRESH_TOKEN;
+  const instanceUrl = process.env.SF_INSTANCE_URL;
 
-  // Primary: OAuth 2.0 Client Credentials Flow
+  // Priority 1: Refresh Token Flow (most reliable, works with any org)
+  if (refreshToken && instanceUrl) {
+    return getRefreshTokenConnection(loginUrl, refreshToken, instanceUrl, clientId, clientSecret);
+  }
+
+  // Priority 2: OAuth 2.0 Client Credentials Flow
   if (clientId && clientSecret) {
     return getClientCredentialsConnection(loginUrl, clientId, clientSecret);
   }
 
-  // Fallback: Username-Password flow (requires SOAP API enabled)
+  // Priority 3: Username-Password flow
   return getUsernamePasswordConnection(loginUrl);
+}
+
+/**
+ * OAuth 2.0 Refresh Token Flow.
+ * 
+ * Most reliable for developer/sandbox orgs where SOAP API 
+ * and Client Credentials may be disabled.
+ * Uses a long-lived refresh token obtained from SFDX CLI.
+ */
+async function getRefreshTokenConnection(
+  loginUrl: string,
+  refreshToken: string,
+  instanceUrl: string,
+  clientId?: string,
+  clientSecret?: string,
+): Promise<Connection> {
+  try {
+    const tokenUrl = `${loginUrl}/services/oauth2/token`;
+    const params = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: clientId || "PlatformCLI",
+    });
+    if (clientSecret) params.append("client_secret", clientSecret);
+
+    const response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new SalesforceError(
+        `Refresh Token auth failed (${response.status}): ${errorBody}`,
+        "AUTH_REFRESH_TOKEN_FAILED"
+      );
+    }
+
+    const tokenData = await response.json();
+
+    const conn = new Connection({
+      instanceUrl: tokenData.instance_url || instanceUrl,
+      accessToken: tokenData.access_token,
+    });
+
+    sfConnection = conn;
+    connectionExpiry = Date.now() + 90 * 60 * 1000;
+    console.log("[SF] Connected via OAuth 2.0 Refresh Token flow");
+    console.log("[SF] Instance:", tokenData.instance_url || instanceUrl);
+    return conn;
+  } catch (error) {
+    sfConnection = null;
+    if (error instanceof SalesforceError) throw error;
+    throw new SalesforceError(
+      `Salesforce refresh token login failed: ${(error as Error).message}`,
+      "AUTH_REFRESH_TOKEN_FAILED"
+    );
+  }
 }
 
 /**
@@ -109,32 +175,66 @@ async function getClientCredentialsConnection(
 
 /**
  * Username-Password OAuth flow (fallback).
- * Requires SOAP API to be enabled in the org.
+ * Uses REST-based OAuth 2.0 password grant (NOT SOAP API).
+ * This works even when SOAP API login is disabled.
  */
 async function getUsernamePasswordConnection(loginUrl: string): Promise<Connection> {
-  const conn = new Connection({ loginUrl });
-
   const username = process.env.SF_USERNAME;
   const password = process.env.SF_PASSWORD;
   const securityToken = process.env.SF_SECURITY_TOKEN || "";
+  const clientId = process.env.SF_CLIENT_ID;
+  const clientSecret = process.env.SF_CLIENT_SECRET;
 
   if (!username || !password) {
     throw new SalesforceError(
-      "Missing Salesforce credentials. Set SF_CLIENT_ID + SF_CLIENT_SECRET (preferred) or SF_USERNAME + SF_PASSWORD in .env.local",
+      "Missing Salesforce credentials. Set SF_USERNAME + SF_PASSWORD in .env.local",
       "AUTH_CONFIG_ERROR"
     );
   }
 
   try {
-    await conn.login(username, password + securityToken);
+    const tokenUrl = `${loginUrl}/services/oauth2/token`;
+    const params = new URLSearchParams({
+      grant_type: "password",
+      username: username,
+      password: password + securityToken,
+    });
+    
+    // Add client credentials if available (required for most Connected Apps)
+    if (clientId) params.append("client_id", clientId);
+    if (clientSecret) params.append("client_secret", clientSecret);
+
+    const response = await fetch(tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: params.toString(),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.text();
+      throw new SalesforceError(
+        `Password OAuth failed (${response.status}): ${errorBody}`,
+        "AUTH_PASSWORD_FAILED"
+      );
+    }
+
+    const tokenData = await response.json();
+
+    const conn = new Connection({
+      instanceUrl: tokenData.instance_url,
+      accessToken: tokenData.access_token,
+    });
+
     sfConnection = conn;
     connectionExpiry = Date.now() + 90 * 60 * 1000;
-    console.log("[SF] Connected via Username-Password flow");
+    console.log("[SF] Connected via OAuth 2.0 Password flow");
+    console.log("[SF] Instance:", tokenData.instance_url);
     return conn;
   } catch (error) {
     sfConnection = null;
+    if (error instanceof SalesforceError) throw error;
     throw new SalesforceError(
-      `Salesforce login failed: ${(error as Error).message}`,
+      `Salesforce password login failed: ${(error as Error).message}`,
       "AUTH_LOGIN_FAILED"
     );
   }
