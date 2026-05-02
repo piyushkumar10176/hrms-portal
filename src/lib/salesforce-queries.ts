@@ -21,24 +21,16 @@ export interface SFEmployee {
   First_Name__c: string;
   Last_Name__c: string;
   Official_Email__c: string;
-  Personal_Email__c?: string;
   Mobile__c?: string;
   DOB__c?: string;
   Date_of_Joining__c: string;
   Employee_Status__c: string;
   Photograph__c?: string;
   Department__c?: string;
-  Department__r?: { Name: string; Id: string };
   Designation__c?: string;
-  Designation__r?: { Name: string; Id: string };
   Reporting_Manager__c?: string;
   Reporting_Manager__r?: { Name: string; Id: string; Official_Email__c: string };
-  Shift__c?: string;
-  Shift__r?: { Name: string; Start_Time__c: string; End_Time__c: string };
   Gender__c?: string;
-  Blood_Group__c?: string;
-  Emergency_Contact_Name__c?: string;
-  Emergency_Contact_Phone__c?: string;
   PAN__c?: string;
   Aadhaar__c?: string;
   Bank_Account_Number__c?: string;
@@ -132,14 +124,12 @@ export interface SFShift {
 export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
   return queryOne<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
-           Official_Email__c, Personal_Email__c, Mobile__c, DOB__c,
+           Official_Email__c, Mobile__c, DOB__c,
            Date_of_Joining__c, Employee_Status__c, Photograph__c, Gender__c,
-           Blood_Group__c, Emergency_Contact_Name__c, Emergency_Contact_Phone__c,
-           Department__c, Department__r.Name, Department__r.Id,
-           Designation__c, Designation__r.Name, Designation__r.Id,
+           Department__c, Designation__c,
            Reporting_Manager__c, Reporting_Manager__r.Name, 
            Reporting_Manager__r.Id, Reporting_Manager__r.Official_Email__c,
-           Shift__c, Shift__r.Name, Shift__r.Start_Time__c, Shift__r.End_Time__c
+           PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c
     FROM Employee__c
     WHERE Official_Email__c = '${email}'
     AND Employee_Status__c = 'Active'
@@ -153,8 +143,8 @@ export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
 export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmployee[]> {
   return query<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
-           Official_Email__c, Photograph__c, Department__r.Name,
-           Designation__r.Name, Employee_Status__c
+           Official_Email__c, Photograph__c, Department__c,
+           Designation__c, Employee_Status__c
     FROM Employee__c
     WHERE Reporting_Manager__c = '${managerEmployeeId}'
     AND Employee_Status__c = 'Active'
@@ -168,8 +158,8 @@ export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmplo
 export async function getAllEmployees(): Promise<SFEmployee[]> {
   return query<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
-           Official_Email__c, Photograph__c, Department__c, Department__r.Name,
-           Designation__c, Designation__r.Name, Employee_Status__c,
+           Official_Email__c, Photograph__c, Department__c,
+           Designation__c, Employee_Status__c,
            Date_of_Joining__c, Reporting_Manager__c, Reporting_Manager__r.Name
     FROM Employee__c
     WHERE Employee_Status__c = 'Active'

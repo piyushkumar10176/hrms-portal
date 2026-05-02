@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Pending_Leave_Requests</fullName>
+    <columns>NAME</columns>
+    <columns>Employee__c</columns>
+    <columns>Leave_Type__c</columns>
+    <columns>From_Date__c</columns>
+    <columns>To_Date__c</columns>
+    <columns>Days__c</columns>
+    <columns>Reason__c</columns>
+    <filterScope>Everything</filterScope>
+    <filters>
+        <field>Status__c</field>
+        <operation>equals</operation>
+        <value>Pending</value>
+    </filters>
+    <label>Pending Leave Requests</label>
+</ListView>

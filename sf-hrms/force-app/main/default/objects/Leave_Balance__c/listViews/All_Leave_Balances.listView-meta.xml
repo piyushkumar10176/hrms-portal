@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>All_Leave_Balances</fullName>
+    <columns>NAME</columns>
+    <columns>Employee__c</columns>
+    <columns>Leave_Type__c</columns>
+    <columns>Year__c</columns>
+    <columns>Opening_Balance__c</columns>
+    <columns>Accrued__c</columns>
+    <columns>Availed__c</columns>
+    <columns>Closing_Balance__c</columns>
+    <filterScope>Everything</filterScope>
+    <label>All Leave Balances</label>
+</ListView>
