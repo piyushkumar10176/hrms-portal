@@ -78,33 +78,58 @@ export interface HistoryRecord {
   description: string;
 }
 
-// ── Seed Data ──
 const SEED_EMPLOYEES: Employee[] = [
-  // CEO
-  { id:"ceo", employeeId:"EMP001", firstName:"Aditya", lastName:"Birla", email:"ceo@example.com", phone:"9876543201", department:"Executive", designation:"CEO", dateOfJoining:"2020-01-01", reportingManagerId:null, role:"admin", status:"Active", password:"admin", gender:"Male", city:"Mumbai", dateOfBirth:"1980-05-20" },
-  // CTO
-  { id:"cto", employeeId:"EMP002", firstName:"Sanya", lastName:"Mirza", email:"cto@example.com", phone:"9876543202", department:"Engineering", designation:"CTO", dateOfJoining:"2021-03-01", reportingManagerId:"ceo", role:"admin", status:"Active", password:"admin", gender:"Female", city:"Bangalore" },
-  // Heads of Department
-  { id:"hod_eng", employeeId:"EMP003", firstName:"Vikram", lastName:"Rathore", email:"vikram@example.com", phone:"9876543203", department:"Engineering", designation:"VP of Engineering", dateOfJoining:"2021-06-15", reportingManagerId:"cto", role:"admin", status:"Active", password:"admin", gender:"Male", city:"Bangalore" },
-  { id:"hod_hr", employeeId:"EMP004", firstName:"Piyush", lastName:"Kumar", email:"admin@example.com", phone:"9876543210", department:"HR", designation:"Head of HR", dateOfJoining:"2022-01-15", reportingManagerId:"ceo", role:"admin", status:"Active", password:"admin123", gender:"Male", city:"Delhi", dateOfBirth:"1995-05-20", address:"123 Main Street", bankName:"HDFC Bank", accountNumber:"****4521", ifscCode:"HDFC0001234", panNumber:"ABCDE1234F", aadharNumber:"****-****-5678" },
-  // Team Leads
-  { id:"tl_front", employeeId:"EMP005", firstName:"Priya", lastName:"Sharma", email:"priya@example.com", phone:"9876543211", department:"Engineering", designation:"Frontend Lead", dateOfJoining:"2023-03-01", reportingManagerId:"hod_eng", role:"employee", status:"Active", password:"emp123", gender:"Female", city:"Mumbai", dateOfBirth:"1996-05-12", bankName:"ICICI Bank", accountNumber:"****7890", ifscCode:"ICIC0005678" },
-  { id:"tl_back", employeeId:"EMP006", firstName:"Arjun", lastName:"Reddy", email:"arjun@example.com", phone:"9876543212", department:"Engineering", designation:"Backend Lead", dateOfJoining:"2023-05-10", reportingManagerId:"hod_eng", role:"employee", status:"Active", password:"emp123", gender:"Male", city:"Hyderabad" },
-  // Developers
-  { id:"dev1", employeeId:"EMP007", firstName:"Rahul", lastName:"Verma", email:"rahul@example.com", phone:"9876543213", department:"Engineering", designation:"Frontend Developer", dateOfJoining:"2024-01-15", reportingManagerId:"tl_front", role:"employee", status:"Active", password:"emp123", gender:"Male", city:"Bangalore", dateOfBirth:"1998-06-05" },
-  { id:"dev2", employeeId:"EMP008", firstName:"Sneha", lastName:"Patil", email:"sneha@example.com", phone:"9876543214", department:"Engineering", designation:"Backend Developer", dateOfJoining:"2024-02-20", reportingManagerId:"tl_back", role:"employee", status:"Active", password:"emp123", gender:"Female", city:"Pune" },
+  { id: "e1", employeeId: "EMP001", firstName: "Tushar", lastName: "Sharma", email: "tushar.sharma@cloudsheer.com", phone: "9000000001", department: "Executive", designation: "CEO", dateOfJoining: "2020-01-01", reportingManagerId: null, role: "admin", status: "Active", password: "admin" },
+  { id: "e2", employeeId: "EMP002", firstName: "Rajat", lastName: "Sharma", email: "rajat.sharma@cloudsheer.com", phone: "9000000002", department: "Technical Delivery", designation: "Technical Delivery Head", dateOfJoining: "2020-06-01", reportingManagerId: "e1", role: "admin", status: "Active", password: "emp123" },
+  { id: "e3", employeeId: "EMP003", firstName: "Shubham", lastName: "Bansal", email: "shubham.bansal@cloudsheer.com", phone: "9000000003", department: "Growth & Marketing", designation: "Growth & Marketing - Head", dateOfJoining: "2020-06-01", reportingManagerId: "e1", role: "admin", status: "Active", password: "emp123" },
+  { id: "e4", employeeId: "EMP004", firstName: "Bharat", lastName: "Sharma", email: "bharat.sharma@cloudsheer.com", phone: "9000000004", department: "Operations", designation: "Head of Operations", dateOfJoining: "2020-06-01", reportingManagerId: "e1", role: "admin", status: "Active", password: "emp123" },
+  { id: "e5", employeeId: "EMP005", firstName: "Ankur", lastName: "Trivedi", email: "ankur.trivedi@cloudsheer.com", phone: "9000000005", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2022-01-15", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e6", employeeId: "EMP006", firstName: "Shainkey", lastName: "Pawaiya", email: "shainkey.pawaiya@cloudsheer.com", phone: "9000000006", department: "Technical Delivery", designation: "Project Manager", dateOfJoining: "2021-03-01", reportingManagerId: "e2", role: "employee", status: "Active", password: "emp123" },
+  { id: "e7", employeeId: "EMP007", firstName: "Pranay", lastName: "Pandey", email: "pranay.pandey@cloudsheer.com", phone: "9000000007", department: "QA", designation: "Team Lead - QA", dateOfJoining: "2021-05-10", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e8", employeeId: "EMP008", firstName: "Arihanta", lastName: "Jain", email: "arihanta.jain@cloudsheer.com", phone: "9000000008", department: "HR", designation: "Assistant Manager HR", dateOfJoining: "2021-08-20", reportingManagerId: "e4", role: "admin", status: "Active", password: "emp123" },
+  { id: "e9", employeeId: "EMP009", firstName: "Shivam", lastName: "Goel", email: "shivam.goel@cloudsheer.com", phone: "9000000009", department: "Growth & Marketing", designation: "Strategy & Growth - Associate", dateOfJoining: "2022-02-15", reportingManagerId: "e3", role: "employee", status: "Active", password: "emp123" },
+  { id: "e10", employeeId: "EMP010", firstName: "Prateek", lastName: "Jain", email: "prateek.jain@cloudsheer.com", phone: "9000000010", department: "Growth & Marketing", designation: "Strategy & Growth - Associate", dateOfJoining: "2022-04-10", reportingManagerId: "e3", role: "employee", status: "Active", password: "emp123" },
+  { id: "e11", employeeId: "EMP011", firstName: "Tammana", lastName: "Gautam", email: "tammana.gautam@cloudsheer.com", phone: "9000000011", department: "Technical Delivery", designation: "BA - Salesforce", dateOfJoining: "2022-06-05", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e12", employeeId: "EMP012", firstName: "Vishal", lastName: "Yadav", email: "vishal.yadav@cloudsheer.com", phone: "9000000012", department: "Technical Delivery", designation: "BA - Salesforce", dateOfJoining: "2022-07-15", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e13", employeeId: "EMP013", firstName: "Abhishek", lastName: "Kaplesh", email: "abhishek.kaplesh@cloudsheer.com", phone: "9000000013", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-01-10", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e14", employeeId: "EMP014", firstName: "Ishit", lastName: "Bansal", email: "ishit.bansal@cloudsheer.com", phone: "9000000014", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-02-20", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e15", employeeId: "EMP015", firstName: "Arun", lastName: "Kumar", email: "arun.kumar@cloudsheer.com", phone: "9000000015", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-03-15", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e16", employeeId: "EMP016", firstName: "Divyansh", lastName: "Sharma", email: "divyansh.sharma@cloudsheer.com", phone: "9000000016", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-04-10", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e17", employeeId: "EMP017", firstName: "Gaurav", lastName: "Khanna", email: "gaurav.khanna@cloudsheer.com", phone: "9000000017", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-05-05", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e18", employeeId: "EMP018", firstName: "Piyush", lastName: "Kumar Singh", email: "piyush.kumar@cloudsheer.com", phone: "9876543210", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-06-01", reportingManagerId: "e6", role: "admin", status: "Active", password: "Piyush@1606" },
+  { id: "e19", employeeId: "EMP019", firstName: "Rahul", lastName: "Babbar", email: "rahul.babbar@cloudsheer.com", phone: "9000000019", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2023-07-20", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
+  { id: "e20", employeeId: "EMP020", firstName: "Vansh", lastName: "Nandan Mathur", email: "vansh.nandan@cloudsheer.com", phone: "9000000020", department: "Technical Delivery", designation: "Associate Salesforce Developer", dateOfJoining: "2023-08-15", reportingManagerId: "e18", role: "employee", status: "Active", password: "emp123" },
+  { id: "e21", employeeId: "EMP021", firstName: "Aayush", lastName: "Gupta", email: "aayush.gupta@cloudsheer.com", phone: "9000000021", department: "Technical Delivery", designation: "Associate Salesforce Developer", dateOfJoining: "2023-09-10", reportingManagerId: "e18", role: "employee", status: "Active", password: "emp123" },
+  { id: "e22", employeeId: "EMP022", firstName: "Himanshu", lastName: "Yadav", email: "himanshu.yadav@cloudsheer.com", phone: "9000000022", department: "QA", designation: "QA", dateOfJoining: "2023-10-05", reportingManagerId: "e7", role: "employee", status: "Active", password: "emp123" },
+  { id: "e23", employeeId: "EMP023", firstName: "Manish", lastName: "Pavadiya", email: "manish.pavadiya@cloudsheer.com", phone: "9000000023", department: "Technical Delivery", designation: "Salesforce Consultant", dateOfJoining: "2023-11-20", reportingManagerId: "e2", role: "employee", status: "Active", password: "emp123" },
+  { id: "e24", employeeId: "EMP024", firstName: "Sweety", lastName: "Singh", email: "sweety.singh@cloudsheer.com", phone: "9000000024", department: "Technical Delivery", designation: "Associate Salesforce Developer", dateOfJoining: "2024-01-15", reportingManagerId: "e18", role: "employee", status: "Active", password: "emp123" },
+  { id: "e25", employeeId: "EMP025", firstName: "Alka", lastName: "Yadav", email: "alka.yadav@cloudsheer.com", phone: "9000000025", department: "HR", designation: "HR Associate", dateOfJoining: "2024-02-10", reportingManagerId: "e8", role: "employee", status: "Active", password: "emp123" },
+  { id: "e26", employeeId: "EMP026", firstName: "Bhu Garima", lastName: "Yadav", email: "bhugarima.yadav@cloudsheer.com", phone: "9000000026", department: "Technical Delivery", designation: "Associate Salesforce Developer", dateOfJoining: "2024-03-05", reportingManagerId: "e18", role: "employee", status: "Active", password: "emp123" },
+  { id: "e27", employeeId: "EMP027", firstName: "Utkarsh", lastName: "", email: "utkarsh@cloudsheer.com", phone: "9000000027", department: "Technical Delivery", designation: "Salesforce Developer", dateOfJoining: "2024-04-01", reportingManagerId: "e6", role: "employee", status: "Active", password: "emp123" },
 ];
 
-const SEED_SALARIES: Salary[] = [
-  { employeeId:"ceo", basic:100000, hra:40000, conveyance:5000, medical:5000, special:50000, gross:200000, effectiveFrom:"2024-01-01" },
-  { employeeId:"cto", basic:80000, hra:32000, conveyance:3000, medical:3000, special:32000, gross:150000, effectiveFrom:"2024-01-01" },
-  { employeeId:"hod_eng", basic:60000, hra:24000, conveyance:2000, medical:2000, special:32000, gross:120000, effectiveFrom:"2024-01-01" },
-  { employeeId:"hod_hr", basic:50000, hra:20000, conveyance:2000, medical:2000, special:26000, gross:100000, effectiveFrom:"2024-01-01" },
-  { employeeId:"tl_front", basic:40000, hra:16000, conveyance:1600, medical:1250, special:21150, gross:80000, effectiveFrom:"2024-01-01" },
-  { employeeId:"tl_back", basic:40000, hra:16000, conveyance:1600, medical:1250, special:21150, gross:80000, effectiveFrom:"2024-01-01" },
-  { employeeId:"dev1", basic:25000, hra:10000, conveyance:1600, medical:1250, special:12150, gross:50000, effectiveFrom:"2024-01-15" },
-  { employeeId:"dev2", basic:25000, hra:10000, conveyance:1600, medical:1250, special:12150, gross:50000, effectiveFrom:"2024-02-20" },
-];
+const SEED_SALARIES: Salary[] = SEED_EMPLOYEES.map(e => {
+  let basic = 40000, hra = 16000, conveyance = 2000, medical = 2000, special = 20000, gross = 80000;
+  if (e.designation === "CEO") {
+    basic = 200000; hra = 80000; special = 120000; gross = 400000;
+  } else if (e.designation.includes("Head")) {
+    basic = 100000; hra = 40000; special = 60000; gross = 200000;
+  } else if (e.designation.includes("Manager")) {
+    basic = 70000; hra = 28000; special = 52000; gross = 150000;
+  } else if (e.designation.includes("Lead")) {
+    basic = 60000; hra = 24000; special = 36000; gross = 120000;
+  } else if (e.designation.includes("Associate") && !e.designation.includes("Developer")) {
+    basic = 30000; hra = 12000; special = 18000; gross = 60000;
+  } else if (e.designation === "Salesforce Developer" || e.designation === "QA" || e.designation === "BA - Salesforce") {
+    basic = 50000; hra = 20000; special = 30000; gross = 100000;
+  } else if (e.designation === "Associate Salesforce Developer" || e.designation === "HR Associate") {
+    basic = 25000; hra = 10000; special = 15000; gross = 50000;
+  }
+  return {
+    employeeId: e.id,
+    basic, hra, conveyance, medical, special, gross, effectiveFrom: e.dateOfJoining
+  };
+});
 
 const SEED_HISTORY: HistoryRecord[] = SEED_EMPLOYEES.map(e => ({
   id: `hist_${e.id}_join`, employeeId: e.id, date: e.dateOfJoining,
