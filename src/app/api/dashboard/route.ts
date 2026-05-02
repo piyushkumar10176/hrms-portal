@@ -46,7 +46,7 @@ export async function GET() {
           directReportsLeaves.push({
             id: r.Id,
             name: r.Name,
-            designation: r.Designation__r?.Name || r.Designation__c || "Employee",
+            designation: r.Designation__c || "Employee",
             usedLeaves,
             totalLeaves,
             balances: formattedBalances
