@@ -20,3 +20,22 @@ body {
 
 /* Tabular numbers for time displays */
 .tabular-nums { font-variant-numeric: tabular-nums; }
+
+@media print {
+  body {
+    background-color: white !important;
+  }
+  aside, nav, header, .print\:hidden {
+    display: none !important;
+  }
+  .lg\:col-span-2 {
+    width: 100% !important;
+    display: block !important;
+  }
+  .max-w-4xl, .w-full, main {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

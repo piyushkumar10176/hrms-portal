@@ -73,9 +73,14 @@ export default function PayrollPage() {
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
                 <h3 className="font-semibold text-gray-900">Payslip — {monthName(selected.month)}</h3>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${selected.status === "Paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
-                  {selected.status} {selected.paidOn && `on ${new Date(selected.paidOn).toLocaleDateString("en-IN")}`}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className={`px-2 py-1 rounded-full text-xs font-medium ${selected.status === "Paid" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}>
+                    {selected.status} {selected.paidOn && `on ${new Date(selected.paidOn).toLocaleDateString("en-IN")}`}
+                  </span>
+                  <button onClick={() => window.print()} className="print:hidden text-indigo-600 hover:text-indigo-800 text-sm font-medium bg-indigo-50 px-3 py-1.5 rounded-lg hover:bg-indigo-100 transition-colors">
+                    ⬇ Download PDF
+                  </button>
+                </div>
               </div>
 
               <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">

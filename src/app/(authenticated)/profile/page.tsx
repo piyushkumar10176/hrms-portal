@@ -19,20 +19,49 @@ export default function ProfilePage() {
   const [emp, setEmp] = useState<Emp|null>(null);
   const [history, setHistory] = useState<HistoryRecord[]>([]);
   const [managerName, setManagerName] = useState<string>("");
+  
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState<Partial<Emp>>({});
+  
   const [showPw, setShowPw] = useState(false);
   const [pw, setPw] = useState({old:"",new:"",confirm:""});
   const [pwMsg, setPwMsg] = useState<{text:string;type:"success"|"error"}|null>(null);
+  const [msg, setMsg] = useState<{text:string;type:"success"|"error"}|null>(null);
 
   useEffect(() => {
+    fetchProfile();
+  }, [session?.user?.id]);
+
+  const fetchProfile = () => {
     fetch("/api/employees/me").then(r=>r.json()).then(d=>{
-      if(d.employee) setEmp(d.employee);
+      if(d.employee) {
+        setEmp(d.employee);
+        setEditForm(d.employee);
+      }
       if(d.history) setHistory(d.history);
     });
     fetch("/api/org").then(r=>r.json()).then(d=>{
       const me = d.employees?.find((e:any)=>e.id===session?.user?.id);
       if(me?.managerName) setManagerName(me.managerName);
     }).catch(()=>{});
-  }, [session?.user?.id]);
+  };
+
+  const handleSaveProfile = async () => {
+    const res = await fetch("/api/employees/me", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editForm)
+    });
+    const d = await res.json();
+    if(res.ok) {
+      setEmp(d.employee);
+      setIsEditing(false);
+      setMsg({text: "Profile updated successfully!", type: "success"});
+      setTimeout(() => setMsg(null), 3000);
+    } else {
+      setMsg({text: d.error, type: "error"});
+    }
+  };
 
   const handleChangePw = async () => {
     if(pw.new!==pw.confirm){setPwMsg({text:"Passwords don't match",type:"error"});return;}
@@ -45,49 +74,80 @@ export default function ProfilePage() {
 
   if(!emp) return <div className="text-center py-20 text-gray-400">Loading...</div>;
 
-  const sections = [
-    { title:"Personal Information", fields:[
-      {label:"Full Name",value:`${emp.firstName} ${emp.lastName}`},
-      {label:"Email",value:emp.email}, {label:"Phone",value:emp.phone},
-      {label:"Date of Birth",value:emp.dateOfBirth?new Date(emp.dateOfBirth).toLocaleDateString("en-IN"):"—"},
-      {label:"Gender",value:emp.gender||"—"}, {label:"Address",value:emp.address||"—"}, {label:"City",value:emp.city||"—"},
-    ]},
-    { title:"Employment Details", fields:[
-      {label:"Employee ID",value:emp.employeeId}, {label:"Department",value:emp.department},
-      {label:"Designation",value:emp.designation},
-      {label:"Date of Joining",value:new Date(emp.dateOfJoining).toLocaleDateString("en-IN",{day:"2-digit",month:"long",year:"numeric"})},
-      {label:"Reporting Manager",value:managerName||"No Manager"}, {label:"Role",value:emp.role==="admin"?"Administrator":"Employee"},
-      {label:"Status",value:emp.status},
-    ]},
-    { title:"Bank & Tax", fields:[
-      {label:"Bank Name",value:emp.bankName||"—"}, {label:"Account Number",value:emp.accountNumber||"—"},
-      {label:"IFSC Code",value:emp.ifscCode||"—"}, {label:"PAN",value:emp.panNumber||"—"}, {label:"Aadhar",value:emp.aadharNumber||"—"},
-    ]},
-  ];
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      {msg && <div className={`px-4 py-3 rounded-lg text-sm border ${msg.type==="success"?"bg-green-50 border-green-200 text-green-700":"bg-red-50 border-red-200 text-red-700"}`}>{msg.text}</div>}
+
       {/* Header */}
-      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white flex items-center gap-6">
-        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold">{emp.firstName[0]}{emp.lastName[0]}</div>
-        <div>
+      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-2xl p-6 text-white flex items-center gap-6 relative">
+        <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold shrink-0">{emp.firstName[0]}{emp.lastName[0]}</div>
+        <div className="flex-1">
           <h1 className="text-2xl font-bold">{emp.firstName} {emp.lastName}</h1>
           <p className="opacity-80">{emp.designation} • {emp.department}</p>
           <p className="text-sm opacity-60 mt-1">{emp.employeeId} • {emp.email}</p>
         </div>
+        <button onClick={() => isEditing ? handleSaveProfile() : setIsEditing(true)} 
+          className="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-white/20">
+          {isEditing ? "💾 Save Profile" : "✏️ Edit Profile"}
+        </button>
       </div>
 
-      {/* Info Sections */}
-      {sections.map((sec,i) => (
-        <div key={i} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50"><h3 className="font-semibold text-gray-900">{sec.title}</h3></div>
-          <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-            {sec.fields.map((f,j) => (
-              <div key={j}><label className="text-xs text-gray-500 uppercase tracking-wide">{f.label}</label><p className="text-sm font-medium text-gray-900 mt-1">{f.value}</p></div>
-            ))}
-          </div>
+      {/* Personal Info */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50"><h3 className="font-semibold text-gray-900">Personal Information</h3></div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Phone</label>
+            {isEditing ? <input className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.phone||""} onChange={e=>setEditForm({...editForm, phone: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.phone||"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Date of Birth</label>
+            {isEditing ? <input type="date" className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.dateOfBirth||""} onChange={e=>setEditForm({...editForm, dateOfBirth: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.dateOfBirth?new Date(emp.dateOfBirth).toLocaleDateString("en-IN"):"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Gender</label>
+            {isEditing ? <select className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.gender||""} onChange={e=>setEditForm({...editForm, gender: e.target.value})}><option value="">Select</option><option>Male</option><option>Female</option><option>Other</option></select>
+            : <p className="text-sm font-medium mt-1">{emp.gender||"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">City</label>
+            {isEditing ? <input className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.city||""} onChange={e=>setEditForm({...editForm, city: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.city||"—"}</p>}</div>
+          <div className="md:col-span-2"><label className="text-xs text-gray-500 uppercase tracking-wide">Address</label>
+            {isEditing ? <textarea className="w-full border rounded mt-1 px-2 py-1 text-sm" rows={2} value={editForm.address||""} onChange={e=>setEditForm({...editForm, address: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.address||"—"}</p>}</div>
         </div>
-      ))}
+      </div>
+
+      {/* Employment Info (Read Only) */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50"><h3 className="font-semibold text-gray-900">Employment Details <span className="text-xs font-normal text-gray-400 ml-2">(Contact HR to modify)</span></h3></div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Employee ID</label><p className="text-sm font-medium mt-1">{emp.employeeId}</p></div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Department</label><p className="text-sm font-medium mt-1">{emp.department}</p></div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Designation</label><p className="text-sm font-medium mt-1">{emp.designation}</p></div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Date of Joining</label><p className="text-sm font-medium mt-1">{new Date(emp.dateOfJoining).toLocaleDateString("en-IN")}</p></div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Reporting Manager</label><p className="text-sm font-medium mt-1">{managerName||"No Manager"}</p></div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Status</label><p className="text-sm font-medium mt-1">{emp.status}</p></div>
+        </div>
+      </div>
+
+      {/* Bank Info */}
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50"><h3 className="font-semibold text-gray-900">Bank & Tax Information</h3></div>
+        <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Bank Name</label>
+            {isEditing ? <input className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.bankName||""} onChange={e=>setEditForm({...editForm, bankName: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.bankName||"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Account Number</label>
+            {isEditing ? <input type="password" placeholder="••••••••" className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.accountNumber||""} onChange={e=>setEditForm({...editForm, accountNumber: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.accountNumber?"••••"+emp.accountNumber.slice(-4):"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">IFSC Code</label>
+            {isEditing ? <input className="w-full border rounded mt-1 px-2 py-1 text-sm uppercase" value={editForm.ifscCode||""} onChange={e=>setEditForm({...editForm, ifscCode: e.target.value.toUpperCase()})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.ifscCode||"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">PAN Number</label>
+            {isEditing ? <input className="w-full border rounded mt-1 px-2 py-1 text-sm uppercase" value={editForm.panNumber||""} onChange={e=>setEditForm({...editForm, panNumber: e.target.value.toUpperCase()})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.panNumber||"—"}</p>}</div>
+          <div><label className="text-xs text-gray-500 uppercase tracking-wide">Aadhar Number</label>
+            {isEditing ? <input className="w-full border rounded mt-1 px-2 py-1 text-sm" value={editForm.aadharNumber||""} onChange={e=>setEditForm({...editForm, aadharNumber: e.target.value})} /> 
+            : <p className="text-sm font-medium mt-1">{emp.aadharNumber?"•••• "+emp.aadharNumber.slice(-4):"—"}</p>}</div>
+        </div>
+      </div>
 
       {/* History / Timeline */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
