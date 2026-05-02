@@ -16,8 +16,8 @@ const NAV_ITEMS = [
       { label: "Profile", href: "/profile" },
     ]
   },
-  { label: "Inbox", href: "/approvals", icon: "📥", roles: ["admin"] },
-  { label: "My Team", href: "/admin/employees", icon: "👥", roles: ["admin"] },
+  { label: "Inbox", href: "/approvals", icon: "📥", roles: ["admin", "employee"] },
+  { label: "My Team", href: "/admin/employees", icon: "👥", roles: ["admin", "employee"] },
   { label: "My Finances", href: "/payroll", icon: "💰", roles: ["admin", "employee"] },
   { label: "Org", href: "/organisation", icon: "🏢", roles: ["admin", "employee"] },
 ];
@@ -67,7 +67,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="text-2xl font-bold text-white tracking-tight">keka&quot;</div>
         </div>
 
-        <nav className="flex-1 py-4 flex flex-col gap-2 items-center w-full overflow-y-auto overflow-x-visible">
+        <nav className="flex-1 py-4 flex flex-col gap-2 items-center w-full overflow-visible">
           {filteredNav.map(item => {
             const isActive = pathname === item.href || (item.subMenu && item.subMenu.some(sub => pathname.startsWith(sub.href)));
             return (
@@ -116,7 +116,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <button onClick={() => setSidebarOpen(true)} className="lg:hidden p-2 text-white hover:bg-[#2c2759] rounded-lg">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>
             </button>
-            <span className="text-white font-semibold tracking-wide hidden sm:block">CLOUDSHEER</span>
+            <span className="text-white font-semibold tracking-wide hidden sm:block">HRMS Portal</span>
           </div>
 
           <div className="flex-1 max-w-md mx-6 hidden md:block">

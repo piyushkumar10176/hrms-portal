@@ -23,15 +23,24 @@ export default function AdminEmployeesPage() {
   });
 
   const isAdmin = session?.user?.role === "admin";
+  const userId = session?.user?.id;
 
   const fetchEmployees = () => {
-    fetch("/api/employees").then(r => r.json()).then(d => setEmployees(d.employees || []));
+    fetch("/api/employees").then(r => r.json()).then(d => {
+      let emps = d.employees || [];
+      if (!isAdmin) {
+        // If not admin, only show direct reports (or self if no direct reports, though usually just direct reports)
+        emps = emps.filter((e: Employee) => e.reportingManagerId === userId);
+      }
+      setEmployees(emps);
+    });
   };
 
   useEffect(() => {
-    if (!isAdmin) return;
-    fetchEmployees();
-  }, [isAdmin]);
+    if (session) {
+      fetchEmployees();
+    }
+  }, [session]);
 
   const handleSave = async () => {
     if (!form.firstName || !form.lastName || !form.email) {
@@ -77,15 +86,6 @@ export default function AdminEmployeesPage() {
     setMsg(null);
   };
 
-  if (!isAdmin) {
-    return (
-      <div className="text-center py-20">
-        <span className="text-5xl">🔒</span>
-        <p className="text-gray-500 mt-4">Admin access required.</p>
-      </div>
-    );
-  }
-
   const filtered = employees.filter(e =>
     `${e.firstName} ${e.lastName} ${e.email} ${e.department}`.toLowerCase().includes(search.toLowerCase())
   );
@@ -94,12 +94,14 @@ export default function AdminEmployeesPage() {
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Employee Management</h1>
-          <p className="text-gray-500 mt-1">{employees.length} employees in the system</p>
+          <h1 className="text-2xl font-bold text-gray-900">{isAdmin ? "Employee Management" : "My Team"}</h1>
+          <p className="text-gray-500 mt-1">{employees.length} employees in your team</p>
         </div>
-        <button onClick={() => showForm ? setShowForm(false) : openAdd()} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
-          {showForm ? "✕ Cancel" : "+ Add Employee"}
-        </button>
+        {isAdmin && (
+          <button onClick={() => showForm ? setShowForm(false) : openAdd()} className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors">
+            {showForm ? "✕ Cancel" : "+ Add Employee"}
+          </button>
+        )}
       </div>
 
       {msg && <div className={`px-4 py-3 rounded-lg text-sm border ${msg.type === "success" ? "bg-green-50 border-green-200 text-green-700" : "bg-red-50 border-red-200 text-red-700"}`}>{msg.text}</div>}
@@ -171,7 +173,7 @@ export default function AdminEmployeesPage() {
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Designation</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Manager</th>
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Role</th>
-                <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>
+                {isAdmin && <th className="text-right px-4 py-3 font-medium text-gray-600">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -201,11 +203,13 @@ export default function AdminEmployeesPage() {
                         {e.role}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors">
-                        Edit
-                      </button>
-                    </td>
+                    {isAdmin && (
+                      <td className="px-4 py-3 text-right">
+                        <button onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors">
+                          Edit
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 );
               })}

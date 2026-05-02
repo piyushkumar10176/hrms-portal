@@ -395,14 +395,13 @@ export async function createHistoryRecord(data: {
   description: string;
 }) {
   try {
-    const conn = await getSalesforceConnection();
-    const result = await conn.sobject("HistoryRecord__c").create({
+    const resultId = await createRecord("HistoryRecord__c", {
       Employee__c: data.employeeId,
       Date__c: data.date,
       Type__c: data.type,
       Description__c: data.description,
     });
-    return result.id;
+    return resultId;
   } catch (error) {
     console.error("Error creating HistoryRecord__c in Salesforce:", error);
     return null;
