@@ -101,7 +101,10 @@ export default function DashboardPage() {
           <p className="text-xl font-bold mt-1">{totalLeave}</p>
           <span className="text-xs text-gray-500 mt-2 inline-block">Combined available</span>
         </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+        <div 
+          onClick={() => router.push("/approvals")}
+          className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow cursor-pointer"
+        >
           <p className="text-sm text-gray-500">{isAdmin ? "Pending Approvals" : "My Requests"}</p>
           <p className="text-xl font-bold mt-1">{pendingCount}</p>
           <span className={`text-xs mt-2 inline-block ${pendingCount > 0 ? "text-orange-600" : "text-green-600"}`}>

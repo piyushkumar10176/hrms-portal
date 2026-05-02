@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/mock-data";
-import { getEmployeeByEmail, getLeaveRequests, createLeaveRequest, getLeaveTypes } from "@/lib/salesforce-queries";
+import { getEmployeeByEmail, getLeaveRequests, createLeaveRequest, getLeaveTypes } from '@/lib/salesforce-queries';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const session = await auth();

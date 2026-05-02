@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/mock-data";
-import { getEmployeeByEmail, getTeamMembers, getTeamLeaveCalendar, getLeaveBalances } from "@/lib/salesforce-queries";
+import { getEmployeeByEmail, getTeamMembers, getTeamLeaveCalendar, getLeaveBalances, getAllEmployees } from "@/lib/salesforce-queries";
+
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   const session = await auth();
@@ -54,8 +56,33 @@ export async function GET() {
         }
       }
       
-      // We don't have DOB__c in Employee yet or it might be empty, so returning empty array for SF
-      const birthdays: any[] = [];
+      // Calculate upcoming birthdays
+      const allEmps = await getAllEmployees();
+      const now = new Date();
+      const birthdays = [];
+      
+      for (const e of allEmps) {
+        if (e.DOB__c) {
+          const d = new Date(e.DOB__c);
+          const bd = new Date(now.getFullYear(), d.getMonth(), d.getDate());
+          if (bd < now) bd.setFullYear(bd.getFullYear() + 1);
+          const diff = Math.ceil((bd.getTime() - now.getTime()) / 86400000);
+          if (diff <= 30) {
+            birthdays.push({
+              employee: {
+                id: e.Id,
+                firstName: e.First_Name__c || e.Name.split(' ')[0],
+                lastName: e.Last_Name__c || e.Name.split(' ')[1] || '',
+                name: e.Name
+              },
+              daysAway: diff,
+              date: e.DOB__c
+            });
+          }
+        }
+      }
+      
+      birthdays.sort((a, b) => a.daysAway - b.daysAway);
       
       return NextResponse.json({ birthdays, teamOnLeave, directReportsLeaves, source: "salesforce" });
     }

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 
 interface Approval {
-  id: string; employeeId: string; leaveType: string; fromDate: string;
+  id: string; employeeId: string; employeeName?: string; leaveType: string; fromDate: string;
   toDate: string; days: number; reason: string; status: string; appliedOn: string;
 }
 interface EmpInfo { id: string; firstName: string; lastName: string; department: string; }
@@ -76,10 +76,10 @@ export default function ApprovalsPage() {
               <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
                 <div className="flex items-start gap-4">
                   <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-600 shrink-0">
-                    {getEmpName(a.employeeId).split(" ").map(n => n[0]).join("")}
+                    {(a.employeeName || getEmpName(a.employeeId)).split(" ").map((n: string) => n[0]).join("")}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900">{getEmpName(a.employeeId)}</p>
+                    <p className="font-semibold text-gray-900">{a.employeeName || getEmpName(a.employeeId)}</p>
                     <p className="text-xs text-gray-400">{getEmpDept(a.employeeId)}</p>
                     <p className="text-sm text-gray-500 mt-1">{a.leaveType} • {a.days} day(s)</p>
                     <p className="text-sm text-gray-500">
