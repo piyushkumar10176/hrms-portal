@@ -162,6 +162,21 @@ export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmplo
   `);
 }
 
+/**
+ * Get all active employees.
+ */
+export async function getAllEmployees(): Promise<SFEmployee[]> {
+  return query<SFEmployee>(`
+    SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
+           Official_Email__c, Photograph__c, Department__c, Department__r.Name,
+           Designation__c, Designation__r.Name, Employee_Status__c,
+           Date_of_Joining__c, Reporting_Manager__c, Reporting_Manager__r.Name
+    FROM Employee__c
+    WHERE Employee_Status__c = 'Active'
+    ORDER BY First_Name__c
+  `);
+}
+
 // ============================================
 // Attendance Queries
 // ============================================

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <brand>
+        <headerColor>#1B96FF</headerColor>
+    </brand>
+    <formFactors>Large</formFactors>
+    <formFactors>Small</formFactors>
+    <isNavAutoTempTabsDisabled>false</isNavAutoTempTabsDisabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
+    <label>Cloudsheer HRMS</label>
+    <navType>Standard</navType>
+    <tabs>standard-home</tabs>
+    <tabs>Employee__c</tabs>
+    <tabs>Attendance_Punch__c</tabs>
+    <tabs>Attendance__c</tabs>
+    <tabs>Leave_Type__c</tabs>
+    <tabs>Leave_Balance__c</tabs>
+    <tabs>Leave_Request__c</tabs>
+    <tabs>Holiday__c</tabs>
+    <tabs>Shift__c</tabs>
+    <uiType>Lightning</uiType>
+</CustomApplication>
