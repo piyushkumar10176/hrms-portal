@@ -91,4 +91,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   session: { strategy: "jwt" },
   trustHost: true,
+  secret: process.env.AUTH_SECRET || "fallback_secret_for_vercel_testing_only_123456789",
 });
