@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 interface OrgNode { id:string; name:string; designation:string; department:string; managerId:string|null; employeeId:string; }
 interface EmpDetail { id:string; firstName:string; lastName:string; employeeId:string; department:string; designation:string; email:string; dateOfJoining:string; managerId:string|null; managerName:string|null; directReports:{id:string;name:string;designation:string}[]; }
@@ -111,7 +112,7 @@ export default function OrgPage() {
                 <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center text-2xl font-bold mx-auto">{selected.firstName[0]}{selected.lastName[0]}</div>
                 <p className="font-bold mt-3">{selected.firstName} {selected.lastName}</p>
                 <p className="text-sm opacity-80">{selected.designation}</p>
-                <p className="text-xs opacity-60 mt-1">{selected.employeeId}</p>
+                <Link href={`/profile/${selected.id}`} className="inline-block mt-2 text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full border border-white/20 transition-colors">View Full Profile →</Link>
               </div>
               <div className="p-5 space-y-3">
                 {[
