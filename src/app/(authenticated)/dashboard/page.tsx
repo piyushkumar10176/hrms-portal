@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const [monthlyStats, setMonthlyStats] = useState({ present: 0, total: 0 });
   const [holidays, setHolidays] = useState<{ name: string; date: string }[]>([]);
   const [birthdays, setBirthdays] = useState<{ employee: { firstName: string; lastName: string; department: string }; daysAway: number }[]>([]);
-  const [teamOnLeave, setTeamOnLeave] = useState<{ name: string; leaveType: string }[]>([]);
+  const [teamOnLeave, setTeamOnLeave] = useState<{ name: string; leaveType: string; fromDate?: string; toDate?: string }[]>([]);
   const [directReportsLeaves, setDirectReportsLeaves] = useState<any[]>([]);
 
   useEffect(() => { setMounted(true); }, []);
