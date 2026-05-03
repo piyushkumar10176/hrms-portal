@@ -15,8 +15,8 @@ export async function GET(req: NextRequest) {
     const emp = {
       id: sfEmp.Id,
       employeeId: sfEmp.Employee_Code__c || sfEmp.Id,
-      firstName: sfEmp.First_Name__c || sfEmp.Name.split(" ")[0],
-      lastName: sfEmp.Last_Name__c || sfEmp.Name.split(" ")[1] || "",
+      firstName: sfEmp.First_Name__c || sfEmp.Name?.split(" ")?.[0] || "",
+      lastName: sfEmp.Last_Name__c || sfEmp.Name?.split(" ")?.[1] || "",
       email: sfEmp.Official_Email__c,
       phone: sfEmp.Mobile__c || "",
       department: sfEmp.Department__c || "",
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     // Try to get history from Salesforce first, fallback to mock data if it fails
     const { getHistoryRecords } = await import("@/lib/salesforce-queries");
-    const sfHistory = await getHistoryRecords(session.user.employeeId);
+    const sfHistory = await getHistoryRecords(sfEmp.Id);
     let history = sfHistory.length > 0 ? sfHistory : db.getHistory(session.user.id);
     
     return NextResponse.json({ employee: emp, history });

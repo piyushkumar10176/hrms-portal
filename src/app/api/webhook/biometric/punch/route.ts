@@ -1,44 +1,33 @@
 /**
  * POST /api/webhook/biometric/punch
  * 
- * PLACEHOLDER: Biometric device webhook receiver.
- * This endpoint is designed to receive punch events from
- * TruTime or similar biometric devices in the future.
- * 
- * Currently returns a stub response.
- * When biometric integration is activated:
- * 1. Validate the webhook secret
- * 2. Parse the device-specific payload
- * 3. Map device employee ID to Salesforce Employee__c
- * 4. Create Attendance_Punch__c with Source = 'Biometric'
- * 
- * Expected payload (TruTime format — adjust when integrating):
- * {
- *   deviceId: string,
- *   employeeCode: string,
- *   timestamp: string (ISO 8601),
- *   punchType: "IN" | "OUT",
- *   verificationMode: "fingerprint" | "face" | "card"
- * }
+ * Biometric device webhook receiver.
+ * Returns 503 until BIOMETRIC_WEBHOOK_SECRET is configured.
+ * When active, validates the webhook secret header before processing.
  */
 
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
-  // ============================================
-  // PHASE 1: Stub implementation
-  // ============================================
+  const expectedSecret = process.env.BIOMETRIC_WEBHOOK_SECRET;
 
-  // Validate webhook secret (uncomment when biometric is active)
-  // const webhookSecret = req.headers.get("x-webhook-secret");
-  // if (webhookSecret !== process.env.BIOMETRIC_WEBHOOK_SECRET) {
-  //   return NextResponse.json(
-  //     { error: "Invalid webhook secret" },
-  //     { status: 401 }
-  //   );
-  // }
+  // If no secret configured, reject all requests — integration not active
+  if (!expectedSecret) {
+    return NextResponse.json(
+      { error: "Biometric integration is not active" },
+      { status: 503 }
+    );
+  }
 
-  // Log the incoming payload for future debugging
+  // Validate webhook secret
+  const providedSecret = req.headers.get("x-webhook-secret");
+  if (providedSecret !== expectedSecret) {
+    return NextResponse.json(
+      { error: "Invalid webhook secret" },
+      { status: 401 }
+    );
+  }
+
   let payload;
   try {
     payload = await req.json();
@@ -49,7 +38,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log("[Biometric Webhook] Received punch event:", JSON.stringify(payload));
+  // Log sanitized info only (not full payload)
+  console.log("[Biometric Webhook] Received punch event from device:", payload?.deviceId || "unknown");
 
   // ============================================
   // PHASE 2: Active implementation (uncomment when ready)
@@ -79,12 +69,11 @@ export async function POST(req: NextRequest) {
   //
   // return NextResponse.json({ success: true, punchId }, { status: 201 });
 
-  // Stub response
+  // Stub response (secret validated, but processing not yet active)
   return NextResponse.json(
     {
       success: true,
-      message: "Biometric webhook endpoint is ready but not yet active",
-      received: payload,
+      message: "Webhook authenticated but processing not yet active",
       status: "stub",
     },
     { status: 202 }
@@ -97,10 +86,8 @@ export async function POST(req: NextRequest) {
  */
 export async function GET() {
   return NextResponse.json({
-    status: "ready",
-    message: "Biometric punch webhook is configured but not yet active",
+    status: process.env.BIOMETRIC_WEBHOOK_SECRET ? "configured" : "not_configured",
+    message: "Biometric punch webhook endpoint",
     version: "1.0.0",
-    supportedDevices: ["TruTime"],
-    documentation: "Contact admin when ready to integrate biometric devices",
   });
 }

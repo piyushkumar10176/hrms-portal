@@ -17,14 +17,23 @@ export default auth((req) => {
   }
 
   // Admin-only routes
-  if (pathname.startsWith("/admin") || pathname.startsWith("/api/employees")) {
-    // Exceptions for employees:
-    // 1. My Team page (/admin/employees)
-    // 2. Employee API to fetch team (/api/employees)
-    // 3. Employee API me endpoint (/api/employees/me)
-    const isException = pathname === "/admin/employees" || pathname === "/api/employees" || pathname.endsWith("/me");
+  const isAdminRoute = pathname.startsWith("/admin") || 
+    pathname.startsWith("/api/employees") ||
+    pathname.startsWith("/api/salary") ||
+    pathname.startsWith("/api/webhook");
+  
+  if (isAdminRoute) {
+    // Exceptions — accessible to any authenticated user:
+    // - /admin/employees (My Team page)
+    // - /api/employees (fetch team list)
+    // - /api/employees/me (own profile)
+    // - /api/employees/[id] GET (view profile — route itself does auth)
+    const isException = pathname === "/admin/employees" || 
+      pathname === "/api/employees" || 
+      pathname.endsWith("/me") ||
+      (pathname.match(/^\/api\/employees\/[^/]+$/) && req.method === "GET");
     
-    if (req.auth.user?.role !== "admin" && !isException) {
+    if (req.auth?.user?.role !== "admin" && !isException) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }

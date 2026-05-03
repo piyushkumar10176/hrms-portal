@@ -3,6 +3,12 @@
  * Data saved to /data/hrms-data.json and survives restarts.
  */
 import { loadData, saveData } from "./store";
+import { hashSync, compareSync } from "bcryptjs";
+
+// Use Web Crypto API (available in both Node.js and Edge Runtime)
+function genId(): string {
+  try { return globalThis.crypto.randomUUID(); } catch { return `${Date.now()}-${Math.random().toString(36).slice(2)}`; }
+}
 
 export type Role = "admin" | "employee";
 
@@ -198,7 +204,7 @@ class DataStore {
     const slips: Payslip[] = [];
     ["2026-01","2026-02","2026-03","2026-04"].forEach(m => {
       this.salaries.forEach(s => {
-        const pf = Math.round(s.basic*0.12); const esi = s.gross<21000?Math.round(s.gross*0.0075):0;
+        const pf = Math.round(s.basic*0.12); const esi = s.gross<=21000?Math.round(s.gross*0.0075):0;
         const pt=200; const tds=Math.round(s.gross*0.1); const td=pf+esi+pt+tds;
         slips.push({ id:`ps-${s.employeeId}-${m}`, employeeId:s.employeeId, month:m, basic:s.basic, hra:s.hra, conveyance:s.conveyance, medical:s.medical, special:s.special, grossEarnings:s.gross, pf, esi, professionalTax:pt, tds, totalDeductions:td, netPay:s.gross-td, status:"Paid", paidOn:`${m}-28` });
       });
@@ -208,19 +214,28 @@ class DataStore {
 
   // ── Auth ──
   authenticate(email: string, password: string): Employee | null {
-    return this.employees.find(e => e.email === email && e.password === password && e.status === "Active") || null;
+    const e = this.employees.find(emp => emp.email === email && emp.status === "Active");
+    if (!e) return null;
+    // Support both hashed and legacy plaintext passwords (migration path)
+    const isMatch = e.password.startsWith("$2") ? compareSync(password, e.password) : e.password === password;
+    if (!isMatch) return null;
+    // Auto-upgrade plaintext to hash on successful login
+    if (!e.password.startsWith("$2")) { e.password = hashSync(password, 10); this.save("employees", this.employees); }
+    return e;
   }
   changePassword(id: string, oldPw: string, newPw: string): boolean {
     const e = this.employees.find(x => x.id === id);
-    if (!e || e.password !== oldPw) return false;
-    e.password = newPw;
+    if (!e) return false;
+    const oldMatch = e.password.startsWith("$2") ? compareSync(oldPw, e.password) : e.password === oldPw;
+    if (!oldMatch) return false;
+    e.password = hashSync(newPw, 10);
     this.save("employees", this.employees);
     return true;
   }
   setEmployeePasswordByToken(token: string, newPw: string): boolean {
     const e = this.employees.find(x => x.inviteToken === token);
     if (!e) return false;
-    e.password = newPw;
+    e.password = hashSync(newPw, 10);
     e.inviteToken = undefined;
     this.save("employees", this.employees);
     return true;
@@ -229,7 +244,7 @@ class DataStore {
   // ── History ──
   getHistory(eid: string) { return this.history.filter(h=>h.employeeId===eid).sort((a,b)=>b.date.localeCompare(a.date)); }
   addHistory(eid: string, type: HistoryRecord["type"], desc: string) {
-    this.history.push({ id:`h_${Date.now()}`, employeeId:eid, date:new Date().toISOString().split("T")[0], type, description:desc });
+    this.history.push({ id:`h_${genId()}`, employeeId:eid, date:new Date().toISOString().split("T")[0], type, description:desc });
     this.save("history", this.history);
   }
 
@@ -237,7 +252,7 @@ class DataStore {
   getEmployee(id: string) { return this.employees.find(e => e.id === id) || null; }
   getAllEmployees() { return this.employees.filter(e => e.status === "Active"); }
   addEmployee(data: Omit<Employee, "id">): Employee {
-    const id = String(Date.now());
+    const id = genId();
     const emp: Employee = { ...data, id };
     this.employees.push(emp);
     this.leaveBalances.push(
@@ -316,9 +331,16 @@ class DataStore {
     const p = `${y}-${String(m+1).padStart(2,"0")}`;
     return this.attendance.filter(a => a.employeeId === eid && a.date.startsWith(p));
   }
+  private formatTime(d: Date): string {
+    return new Intl.DateTimeFormat("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(d);
+  }
+  private formatDate(d: Date): string {
+    return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(d);
+  }
   clockIn(eid: string) {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD local
-    const now = new Date().toLocaleTimeString("en-IN",{timeZone: "Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false});
+    const d = new Date();
+    const today = this.formatDate(d);
+    const now = this.formatTime(d);
     let r = this.attendance.find(a => a.employeeId===eid && a.date===today);
     if (r) { r.clockIn=now; r.clockOut=null; r.status="Present"; }
     else { r={id:`a-${eid}-${today}`,employeeId:eid,date:today,clockIn:now,clockOut:null,status:"Present",totalHours:0}; this.attendance.push(r); }
@@ -326,16 +348,18 @@ class DataStore {
     this.save("attendance",this.attendance); return r;
   }
   clockOut(eid: string) {
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-    const now = new Date().toLocaleTimeString("en-IN",{timeZone: "Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false});
+    const d = new Date();
+    const today = this.formatDate(d);
+    const now = this.formatTime(d);
     const r=this.attendance.find(a=>a.employeeId===eid&&a.date===today);
     if(!r) return null;
     r.clockOut=now;
     if(r.clockIn){
       const[ch,cm]=r.clockIn.split(":").map(Number);
       const[oh,om]=now.split(":").map(Number);
-      const sessionHours = Math.max(0,(oh*60+om-ch*60-cm)/60);
-      r.totalHours = (r.totalHours || 0) + sessionHours;
+      let mins = (oh*60+om) - (ch*60+cm);
+      if (mins < 0) mins += 1440; // cross-midnight
+      r.totalHours = (r.totalHours || 0) + mins/60;
     }
     this.addHistory(eid, "Clock Out", `Clocked out at ${now}. Total session: ${r.totalHours?.toFixed(1)}h`);
     this.save("attendance",this.attendance); return r;
@@ -351,21 +375,27 @@ class DataStore {
     return this.leaveRequests.filter(r=>reps.includes(r.employeeId)&&r.status==="Pending");
   }
   applyLeave(data: Omit<LeaveRequest,"id"|"status"|"appliedOn">) {
-    const req:LeaveRequest={...data,id:`lr${Date.now()}`,status:"Pending",appliedOn:new Date().toISOString()};
+    // Validate date order
+    if (data.fromDate > data.toDate) return null;
+    // Check overlap with existing approved leaves
+    const overlap = this.leaveRequests.find(r => r.employeeId===data.employeeId && r.status==="Approved" && r.fromDate<=data.toDate && r.toDate>=data.fromDate);
+    if (overlap) return null;
+    const req:LeaveRequest={...data,id:`lr_${genId()}`,status:"Pending",appliedOn:new Date().toISOString()};
     this.leaveRequests.push(req);
     const emp=this.getEmployee(data.employeeId);
     const mgr=this.getManagerOf(data.employeeId);
-    if(emp&&mgr){this.notifications.push({id:`n${Date.now()}`,recipientId:mgr.id,title:"New Leave Request",body:`${emp.firstName} ${emp.lastName} applied for ${data.days} day(s) ${data.leaveType}`,type:"leave_applied",read:false,createdAt:new Date().toISOString(),actionUrl:"/approvals"});}
+    if(emp&&mgr){this.notifications.push({id:`n_${genId()}`,recipientId:mgr.id,title:"New Leave Request",body:`${emp.firstName} ${emp.lastName} applied for ${data.days} day(s) ${data.leaveType}`,type:"leave_applied",read:false,createdAt:new Date().toISOString(),actionUrl:"/approvals"});}
     this.addHistory(data.employeeId, "Leave Applied", `Applied ${data.days} day(s) of ${data.leaveType}`);
     this.save("leaveRequests",this.leaveRequests); this.save("notifications",this.notifications);
     return req;
   }
   approveLeave(rid: string, aid: string) {
     const r=this.leaveRequests.find(x=>x.id===rid); if(!r)return null;
-    r.status="Approved"; r.approvedBy=aid; r.approvedOn=new Date().toISOString();
     const b=this.leaveBalances.find(x=>x.employeeId===r.employeeId&&x.leaveType===r.leaveType);
+    if(b && b.available < r.days) return null; // Insufficient balance
+    r.status="Approved"; r.approvedBy=aid; r.approvedOn=new Date().toISOString();
     if(b){b.used+=r.days;b.available=b.total-b.used;}
-    this.notifications.push({id:`n${Date.now()}`,recipientId:r.employeeId,title:"Leave Approved ✅",body:`Your ${r.leaveType} has been approved`,type:"leave_approved",read:false,createdAt:new Date().toISOString(),actionUrl:"/leave"});
+    this.notifications.push({id:`n_${genId()}`,recipientId:r.employeeId,title:"Leave Approved ✅",body:`Your ${r.leaveType} has been approved`,type:"leave_approved",read:false,createdAt:new Date().toISOString(),actionUrl:"/leave"});
     this.addHistory(r.employeeId, "Leave Approved", `${r.days} day(s) of ${r.leaveType} approved.`);
     this.save("leaveRequests",this.leaveRequests);this.save("leaveBalances",this.leaveBalances);this.save("notifications",this.notifications);
     return r;
@@ -373,7 +403,7 @@ class DataStore {
   rejectLeave(rid: string, aid: string) {
     const r=this.leaveRequests.find(x=>x.id===rid); if(!r)return null;
     r.status="Rejected"; r.approvedBy=aid; r.approvedOn=new Date().toISOString();
-    this.notifications.push({id:`n${Date.now()}`,recipientId:r.employeeId,title:"Leave Rejected ❌",body:`Your ${r.leaveType} has been rejected`,type:"leave_rejected",read:false,createdAt:new Date().toISOString(),actionUrl:"/leave"});
+    this.notifications.push({id:`n_${genId()}`,recipientId:r.employeeId,title:"Leave Rejected ❌",body:`Your ${r.leaveType} has been rejected`,type:"leave_rejected",read:false,createdAt:new Date().toISOString(),actionUrl:"/leave"});
     this.addHistory(r.employeeId, "Leave Rejected", `${r.days} day(s) of ${r.leaveType} rejected.`);
     this.save("leaveRequests",this.leaveRequests);this.save("notifications",this.notifications);
     return r;
@@ -389,11 +419,12 @@ class DataStore {
 
   // ── Birthdays & Team Leave ──
   getUpcomingBirthdays() {
-    const now=new Date(); const results:{employee:Employee;daysAway:number}[]=[];
+    const now=new Date(); const todayMidnight=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const results:{employee:Employee;daysAway:number}[]=[];
     this.getAllEmployees().filter(e=>e.dateOfBirth).forEach(e=>{
       const d=new Date(e.dateOfBirth!); const bd=new Date(now.getFullYear(),d.getMonth(),d.getDate());
-      if(bd<now)bd.setFullYear(bd.getFullYear()+1);
-      const diff=Math.ceil((bd.getTime()-now.getTime())/86400000);
+      if(bd<todayMidnight)bd.setFullYear(bd.getFullYear()+1);
+      const diff=Math.round((bd.getTime()-todayMidnight.getTime())/86400000);
       if(diff<=30)results.push({employee:e,daysAway:diff});
     });
     return results.sort((a,b)=>a.daysAway-b.daysAway);

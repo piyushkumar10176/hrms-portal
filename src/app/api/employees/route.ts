@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/lib/mock-data";
 import { createRecord } from "@/lib/salesforce";
 import { getAllEmployees } from "@/lib/salesforce-queries";
+import { randomUUID } from "crypto";
 
 export async function GET() {
   const session = await auth();
@@ -32,7 +33,10 @@ export async function GET() {
     console.error("Salesforce getAllEmployees fallback:", err);
   }
 
-  return NextResponse.json({ employees: db.getAllEmployees(), source: "local" });
+  const allEmps = db.getAllEmployees();
+  // Strip sensitive fields before returning
+  const safeEmps = allEmps.map(({ password, inviteToken, ...rest }) => rest);
+  return NextResponse.json({ employees: safeEmps, source: "local" });
 }
 
 export async function POST(req: NextRequest) {
@@ -42,7 +46,7 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  const token = randomUUID();
   
   try {
     const sfId = await createRecord("Employee__c", {
@@ -58,8 +62,8 @@ export async function POST(req: NextRequest) {
       Gender__c: body.gender
     });
     
-    // We would store the invite token securely in a Custom Setting or external DB, but for now we log it
-    const inviteLink = `${req.headers.get("origin")}/setup-password/${token}`;
+    const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+    const inviteLink = `${baseUrl}/setup-password/${token}`;
     
     console.log(`\n============================`);
     console.log(`📧 MOCK EMAIL SENT TO: ${body.email}`);
@@ -98,7 +102,8 @@ export async function POST(req: NextRequest) {
     address: body.address,
   });
 
-  const inviteLink = `${req.headers.get("origin")}/setup-password/${token}`;
+  const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
+  const inviteLink = `${baseUrl}/setup-password/${token}`;
   
   // Mock Email Sending
   console.log(`\n============================`);

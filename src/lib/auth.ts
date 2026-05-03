@@ -79,7 +79,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       return token;
     },
     async session({ session, token }) {
-      session.user.id = token.sub || "";
+      if (!token.sub) return session; // Reject sessions without a valid user ID
+      session.user.id = token.sub;
       session.user.employeeId = (token.employeeId as string) || "";
       session.user.role = (token.role as string) || "employee";
       session.user.department = (token.department as string) || "";
@@ -91,5 +92,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   },
   session: { strategy: "jwt" },
   trustHost: true,
-  secret: process.env.AUTH_SECRET || "fallback_secret_for_vercel_testing_only_123456789",
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
 });

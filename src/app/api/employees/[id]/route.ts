@@ -12,7 +12,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!emp) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   // Return public employee info (without password/sensitive data)
-  const { password, ...publicEmp } = emp;
+  const { password, inviteToken, ...publicEmp } = emp;
   const history = db.getHistory(id);
   return NextResponse.json({ employee: publicEmp, history });
 }
@@ -29,7 +29,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!id) return NextResponse.json({ error: "Employee ID required" }, { status: 400 });
 
   const body = await req.json();
-  const updated = db.updateEmployee(id, body);
+  
+  // Whitelist allowed fields — prevent mass assignment of password, role, id, inviteToken, etc.
+  const allowedFields = [
+    "firstName", "lastName", "phone", "department", "designation",
+    "dateOfJoining", "reportingManagerId", "dateOfBirth", "gender",
+    "city", "address", "status", "bankName", "accountNumber", "ifscCode"
+  ] as const;
+  const sanitized: Record<string, unknown> = {};
+  for (const key of allowedFields) {
+    if (key in body && body[key] !== undefined) sanitized[key] = body[key];
+  }
+  
+  const updated = db.updateEmployee(id, sanitized);
 
   if (!updated) {
     return NextResponse.json({ error: "Employee not found" }, { status: 404 });
