@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/mock-data";
-import { getEmployeeByEmail, getPendingApprovals } from "@/lib/salesforce-queries";
-import { updateRecord, getSalesforceConnection } from "@/lib/salesforce";
+import { getEmployeeByEmail, getPendingApprovals, createHistoryRecord } from "@/lib/salesforce-queries";
+import { updateRecord, createRecord, getSalesforceConnection } from "@/lib/salesforce";
 
 export const dynamic = "force-dynamic";
 
@@ -83,7 +83,25 @@ export async function POST(req: NextRequest) {
             Availed__c: currentAvailed + lr.Days__c,
             Closing_Balance__c: currentClosing - lr.Days__c
           });
+        } else {
+          // Create balance if it does not exist
+          await createRecord("Leave_Balance__c", {
+            Employee__c: lr.Employee__c,
+            Leave_Type__c: lr.Leave_Type__c,
+            Year__c: currentYear,
+            Opening_Balance__c: 20, // Default opening for MVP
+            Availed__c: lr.Days__c,
+            Closing_Balance__c: 20 - lr.Days__c
+          });
         }
+        
+        // Also create a History record
+        await createHistoryRecord({
+          employeeId: lr.Employee__c, // the employee taking the leave, not the manager
+          date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+          type: "Leave Approved",
+          description: `${lr.Days__c} day(s) leave approved.`
+        });
       }
       
       // Local Notification for SF action

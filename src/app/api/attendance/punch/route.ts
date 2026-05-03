@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/mock-data";
-import { getTodayPunches, createPunch as sfCreatePunch } from "@/lib/salesforce-queries";
+import { getTodayPunches, createPunch as sfCreatePunch, createHistoryRecord } from "@/lib/salesforce-queries";
 
 export async function GET() {
   const session = await auth();
@@ -19,8 +19,8 @@ export async function GET() {
     
     if (clockInPunch) {
       const today = {
-        clockIn: new Date(clockInPunch.Punch_DateTime__c).toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit",hour12:false}),
-        clockOut: clockOutPunch ? new Date(clockOutPunch.Punch_DateTime__c).toLocaleTimeString("en-IN", {hour:"2-digit",minute:"2-digit",hour12:false}) : null,
+        clockIn: new Date(clockInPunch.Punch_DateTime__c).toLocaleTimeString("en-IN", {timeZone:"Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false}),
+        clockOut: clockOutPunch ? new Date(clockOutPunch.Punch_DateTime__c).toLocaleTimeString("en-IN", {timeZone:"Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false}) : null,
         status: "Present"
       };
       return NextResponse.json({ today });
@@ -49,6 +49,14 @@ export async function POST(req: NextRequest) {
       latitude,
       longitude,
       source: "Web"
+    });
+    
+    // Create history record in SF
+    await createHistoryRecord({
+      employeeId: session.user.employeeId,
+      date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+      type: action === "clockIn" ? "Clock In" : "Clock Out",
+      description: `Clocked ${action === "clockIn" ? "in" : "out"} at ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false })}`
     });
     
     // In MVP, we can still fall through and update the mock data just so the UI works seamlessly if SF is missing fields

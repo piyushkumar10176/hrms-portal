@@ -115,25 +115,7 @@ export default function DashboardPage() {
 
       {/* Quick Actions + Widgets */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Quick Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h3 className="font-semibold text-gray-900 mb-4">Quick Actions</h3>
-          <div className="space-y-2">
-            {[
-              { label: "Apply Leave", href: "/leave", icon: "🏖️" },
-              { label: "Clock In/Out", href: "/attendance/clock", icon: "🕐" },
-              { label: "View Attendance", href: "/attendance", icon: "📅" },
-              { label: "My Payslips", href: "/payroll", icon: "💰" },
-              { label: "My Profile", href: "/profile", icon: "👤" },
-            ].map(item => (
-              <button key={item.href} onClick={() => router.push(item.href)} className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors text-left">
-                <span className="text-lg">{item.icon}</span>
-                <span className="text-sm font-medium text-gray-700">{item.label}</span>
-                <span className="ml-auto text-gray-400">→</span>
-              </button>
-            ))}
-          </div>
-        </div>
+
 
         {/* Upcoming Birthdays 🎂 */}
         <div className="bg-white rounded-xl border border-gray-200 p-5">

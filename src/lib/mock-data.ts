@@ -74,7 +74,7 @@ export interface Notification { id: string; recipientId: string; title: string; 
 
 export interface HistoryRecord {
   id: string; employeeId: string; date: string;
-  type: "Promotion" | "Salary Revision" | "Department Change" | "Joining";
+  type: "Promotion" | "Salary Revision" | "Department Change" | "Joining" | "Clock In" | "Clock Out" | "Leave Approved";
   description: string;
 }
 
@@ -317,16 +317,17 @@ class DataStore {
     return this.attendance.filter(a => a.employeeId === eid && a.date.startsWith(p));
   }
   clockIn(eid: string) {
-    const today = new Date().toISOString().split("T")[0];
-    const now = new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false});
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); // YYYY-MM-DD local
+    const now = new Date().toLocaleTimeString("en-IN",{timeZone: "Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false});
     let r = this.attendance.find(a => a.employeeId===eid && a.date===today);
     if (r) { r.clockIn=now; r.clockOut=null; r.status="Present"; }
     else { r={id:`a-${eid}-${today}`,employeeId:eid,date:today,clockIn:now,clockOut:null,status:"Present",totalHours:0}; this.attendance.push(r); }
+    this.addHistory(eid, "Clock In", `Clocked in at ${now}`);
     this.save("attendance",this.attendance); return r;
   }
   clockOut(eid: string) {
-    const today=new Date().toISOString().split("T")[0];
-    const now=new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false});
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const now = new Date().toLocaleTimeString("en-IN",{timeZone: "Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false});
     const r=this.attendance.find(a=>a.employeeId===eid&&a.date===today);
     if(!r) return null;
     r.clockOut=now;
@@ -336,9 +337,10 @@ class DataStore {
       const sessionHours = Math.max(0,(oh*60+om-ch*60-cm)/60);
       r.totalHours = (r.totalHours || 0) + sessionHours;
     }
+    this.addHistory(eid, "Clock Out", `Clocked out at ${now}. Total session: ${r.totalHours?.toFixed(1)}h`);
     this.save("attendance",this.attendance); return r;
   }
-  getTodayAttendance(eid: string) { const t=new Date().toISOString().split("T")[0]; return this.attendance.find(a=>a.employeeId===eid&&a.date===t)||null; }
+  getTodayAttendance(eid: string) { const t=new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }); return this.attendance.find(a=>a.employeeId===eid&&a.date===t)||null; }
 
   // ── Leave ──
   getLeaveBalances(eid: string) { return this.leaveBalances.filter(b=>b.employeeId===eid); }
@@ -363,6 +365,7 @@ class DataStore {
     const b=this.leaveBalances.find(x=>x.employeeId===r.employeeId&&x.leaveType===r.leaveType);
     if(b){b.used+=r.days;b.available=b.total-b.used;}
     this.notifications.push({id:`n${Date.now()}`,recipientId:r.employeeId,title:"Leave Approved ✅",body:`Your ${r.leaveType} has been approved`,type:"leave_approved",read:false,createdAt:new Date().toISOString(),actionUrl:"/leave"});
+    this.addHistory(r.employeeId, "Leave Approved", `${r.days} day(s) of ${r.leaveType} approved.`);
     this.save("leaveRequests",this.leaveRequests);this.save("leaveBalances",this.leaveBalances);this.save("notifications",this.notifications);
     return r;
   }
