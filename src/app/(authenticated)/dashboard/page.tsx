@@ -175,7 +175,16 @@ export default function DashboardPage() {
                     <div className="w-8 h-8 rounded-full bg-orange-200 flex items-center justify-center text-xs font-bold text-orange-700">{t.name[0]}</div>
                     <div>
                       <p className="text-sm font-medium text-gray-900">{t.name}</p>
-                      <p className="text-xs text-gray-500">{t.leaveType}</p>
+                      <p className="text-xs text-gray-500">
+                        {t.leaveType}
+                        {t.fromDate && t.toDate && (
+                          <span className="block mt-0.5 text-orange-600">
+                            {new Date(t.fromDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })} 
+                            {" - "} 
+                            {new Date(t.toDate).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
                 ))}

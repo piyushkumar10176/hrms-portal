@@ -27,9 +27,14 @@ export default function AttendancePage() {
           <h1 className="text-2xl font-bold text-gray-900">Attendance</h1>
           <p className="text-gray-500 mt-1">Your monthly attendance records</p>
         </div>
-        <select value={month} onChange={e => setMonth(Number(e.target.value))} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-          {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
-        </select>
+        <div className="flex gap-4">
+          <select value={month} onChange={e => setMonth(Number(e.target.value))} className="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+            {months.map((m, i) => <option key={i} value={i}>{m}</option>)}
+          </select>
+          <a href="/attendance/clock" className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm">
+            <span>⏱️</span> Web Clock-In
+          </a>
+        </div>
       </div>
 
       {/* Summary Cards */}

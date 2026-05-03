@@ -19,10 +19,9 @@ export default function ApprovalsPage() {
   const isAdmin = session?.user?.role === "admin";
 
   useEffect(() => {
-    if (!isAdmin) return;
     fetch("/api/approvals").then(r => r.json()).then(d => setApprovals(d.approvals || []));
     fetch("/api/employees").then(r => r.json()).then(d => setEmployees(d.employees || [])).catch(() => {});
-  }, [isAdmin]);
+  }, [session]);
 
   const getEmpName = (id: string) => {
     const e = employees.find(emp => emp.id === id);
@@ -44,15 +43,6 @@ export default function ApprovalsPage() {
     setApprovals(prev => prev.filter(a => a.id !== requestId));
     setLoading(null);
   };
-
-  if (!isAdmin) {
-    return (
-      <div className="text-center py-20">
-        <span className="text-5xl">🔒</span>
-        <p className="text-gray-500 mt-4">This page is only accessible to administrators.</p>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">

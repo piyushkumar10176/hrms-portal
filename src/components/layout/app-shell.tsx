@@ -79,13 +79,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               >
                 <Link
                   href={item.subMenu ? item.subMenu[0].href : item.href}
-                  className={`flex flex-col items-center justify-center p-2 rounded-lg text-[11px] font-medium transition-all duration-200 w-16 h-16 ${
+                  className={`flex flex-col items-center justify-center p-2 rounded-lg text-[11px] font-medium transition-all duration-200 w-[84px] h-[72px] text-center ${
                     isActive ? "text-white bg-[#1e1a42]" : "text-gray-400 hover:text-white hover:bg-[#3b3469]"
                   }`}
                   onClick={() => setSidebarOpen(false)}
                 >
                   <span className="text-xl mb-1">{item.icon}</span>
-                  <span>{item.label}</span>
+                  <span className="leading-tight">{item.label}</span>
                 </Link>
                 
                 {/* Flyout Menu for "Me" */}
@@ -161,10 +161,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
-            <div className="flex items-center gap-2 border-l border-[#52498e] pl-4">
+            <div className="flex items-center gap-2 border-l border-[#52498e] pl-4 relative group cursor-pointer">
               <div className="hidden md:block text-right mr-2">
                 <p className="text-xs font-semibold">{session?.user?.name}</p>
-                <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-[10px] text-gray-300 hover:text-white hover:underline">Sign Out</button>
+                <div className="flex gap-2 justify-end mt-0.5">
+                  <Link href="/profile" className="text-[10px] text-gray-300 hover:text-white hover:underline">Profile</Link>
+                  <button onClick={() => signOut({ callbackUrl: "/login" })} className="text-[10px] text-gray-300 hover:text-white hover:underline">Sign Out</button>
+                </div>
               </div>
               <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-sm font-bold text-indigo-700">
                 {userInitials}

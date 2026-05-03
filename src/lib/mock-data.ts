@@ -320,7 +320,7 @@ class DataStore {
     const today = new Date().toISOString().split("T")[0];
     const now = new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:false});
     let r = this.attendance.find(a => a.employeeId===eid && a.date===today);
-    if (r) { r.clockIn=now; r.status="Present"; }
+    if (r) { r.clockIn=now; r.clockOut=null; r.status="Present"; }
     else { r={id:`a-${eid}-${today}`,employeeId:eid,date:today,clockIn:now,clockOut:null,status:"Present",totalHours:0}; this.attendance.push(r); }
     this.save("attendance",this.attendance); return r;
   }
@@ -330,7 +330,12 @@ class DataStore {
     const r=this.attendance.find(a=>a.employeeId===eid&&a.date===today);
     if(!r) return null;
     r.clockOut=now;
-    if(r.clockIn){const[ch,cm]=r.clockIn.split(":").map(Number);const[oh,om]=now.split(":").map(Number);r.totalHours=Math.max(0,(oh*60+om-ch*60-cm)/60);}
+    if(r.clockIn){
+      const[ch,cm]=r.clockIn.split(":").map(Number);
+      const[oh,om]=now.split(":").map(Number);
+      const sessionHours = Math.max(0,(oh*60+om-ch*60-cm)/60);
+      r.totalHours = (r.totalHours || 0) + sessionHours;
+    }
     this.save("attendance",this.attendance); return r;
   }
   getTodayAttendance(eid: string) { const t=new Date().toISOString().split("T")[0]; return this.attendance.find(a=>a.employeeId===eid&&a.date===t)||null; }
@@ -393,7 +398,11 @@ class DataStore {
     const mid=e.reportingManagerId||e.id;
     const team=this.employees.filter(x=>(x.reportingManagerId===mid||x.id===mid)&&x.id!==eid&&x.status==="Active");
     const today=new Date().toISOString().split("T")[0];
-    return team.filter(t=>this.leaveRequests.some(r=>r.employeeId===t.id&&r.status==="Approved"&&r.fromDate<=today&&r.toDate>=today)).map(t=>({name:`${t.firstName} ${t.lastName}`,leaveType:this.leaveRequests.find(r=>r.employeeId===t.id&&r.status==="Approved"&&r.fromDate<=today&&r.toDate>=today)?.leaveType||"Leave"}));
+    return team.map(t => {
+      const lr = this.leaveRequests.find(r=>r.employeeId===t.id&&r.status==="Approved"&&r.fromDate<=today&&r.toDate>=today);
+      if (!lr) return null;
+      return { name:`${t.firstName} ${t.lastName}`, leaveType:lr.leaveType, fromDate: lr.fromDate, toDate: lr.toDate };
+    }).filter(Boolean);
   }
 
   // ── Notifications ──

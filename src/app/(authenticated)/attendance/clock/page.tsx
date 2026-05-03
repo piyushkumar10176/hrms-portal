@@ -68,7 +68,7 @@ export default function ClockPage() {
         <p className="text-xs text-gray-400 mb-6">📍 GPS will be captured on punch</p>
 
         <div className="flex gap-4">
-          <button onClick={() => handlePunch("clockIn")} disabled={loading || !!today?.clockIn}
+          <button onClick={() => handlePunch("clockIn")} disabled={loading || (today?.clockIn && !today?.clockOut)}
             className="flex-1 py-4 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-lg">
             🕐 Clock In
           </button>
