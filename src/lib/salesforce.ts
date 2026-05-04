@@ -41,15 +41,23 @@ export async function getSalesforceConnection(): Promise<Connection> {
 
   // Priority 1: Refresh Token Flow (most reliable, works with any org)
   if (refreshToken && instanceUrl) {
-    return getRefreshTokenConnection(loginUrl, refreshToken, instanceUrl, clientId, clientSecret);
+    try {
+      return await getRefreshTokenConnection(loginUrl, refreshToken, instanceUrl, clientId, clientSecret);
+    } catch (err) {
+      console.warn("[SF] Refresh Token flow failed, falling back...", err);
+    }
   }
 
   // Priority 2: OAuth 2.0 Client Credentials Flow
   if (clientId && clientSecret) {
-    return getClientCredentialsConnection(loginUrl, clientId, clientSecret);
+    try {
+      return await getClientCredentialsConnection(loginUrl, clientId, clientSecret);
+    } catch (err) {
+      console.warn("[SF] Client Credentials flow failed, falling back...", err);
+    }
   }
 
-  // Priority 3: Username-Password flow
+  // Priority 3: Username-Password flow (JSforce native)
   return getUsernamePasswordConnection(loginUrl);
 }
 
@@ -126,7 +134,9 @@ async function getClientCredentialsConnection(
 ): Promise<Connection> {
   try {
     // Token endpoint for Client Credentials flow
-    const tokenUrl = `${loginUrl}/services/oauth2/token`;
+    // Try to use instanceUrl if available, otherwise fallback to loginUrl
+    const urlBase = process.env.SF_INSTANCE_URL || loginUrl;
+    const tokenUrl = `${urlBase}/services/oauth2/token`;
 
     const params = new URLSearchParams({
       grant_type: "client_credentials",
@@ -182,8 +192,6 @@ async function getUsernamePasswordConnection(loginUrl: string): Promise<Connecti
   const username = process.env.SF_USERNAME;
   const password = process.env.SF_PASSWORD;
   const securityToken = process.env.SF_SECURITY_TOKEN || "";
-  const clientId = process.env.SF_CLIENT_ID;
-  const clientSecret = process.env.SF_CLIENT_SECRET;
 
   if (!username || !password) {
     throw new SalesforceError(
@@ -193,42 +201,13 @@ async function getUsernamePasswordConnection(loginUrl: string): Promise<Connecti
   }
 
   try {
-    const tokenUrl = `${loginUrl}/services/oauth2/token`;
-    const params = new URLSearchParams({
-      grant_type: "password",
-      username: username,
-      password: password + securityToken,
-    });
+    const conn = new Connection({ loginUrl });
+    await conn.login(username, password + securityToken);
     
-    // Add client credentials if available (required for most Connected Apps)
-    if (clientId) params.append("client_id", clientId);
-    if (clientSecret) params.append("client_secret", clientSecret);
-
-    const response = await fetch(tokenUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params.toString(),
-    });
-
-    if (!response.ok) {
-      const errorBody = await response.text();
-      throw new SalesforceError(
-        `Password OAuth failed (${response.status}): ${errorBody}`,
-        "AUTH_PASSWORD_FAILED"
-      );
-    }
-
-    const tokenData = await response.json();
-
-    const conn = new Connection({
-      instanceUrl: tokenData.instance_url,
-      accessToken: tokenData.access_token,
-    });
-
     sfConnection = conn;
     connectionExpiry = Date.now() + 90 * 60 * 1000;
-    console.log("[SF] Connected via OAuth 2.0 Password flow");
-    console.log("[SF] Instance:", tokenData.instance_url);
+    console.log("[SF] Connected via JSforce SOAP login flow");
+    console.log("[SF] Instance:", conn.instanceUrl);
     return conn;
   } catch (error) {
     sfConnection = null;
