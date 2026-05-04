@@ -47,29 +47,59 @@ export async function POST(req: NextRequest) {
 
   try {
     const conn = await getSalesforceConnection();
+    const manager = await getEmployeeByEmail(session.user.email);
     
-    // Fetch the leave request to get its details
-    const lrResult = await conn.query(`SELECT Id, Employee__c, Leave_Type__c, Days__c, Status__c FROM Leave_Request__c WHERE Id = '${requestId}' LIMIT 1`);
+    // Fetch the leave request with full details
+    const lrResult = await conn.query(`
+      SELECT Id, Employee__c, Employee__r.Name, Leave_Type__c, Leave_Type__r.Name,
+             Days__c, From_Date__c, To_Date__c, Status__c, Reason__c
+      FROM Leave_Request__c WHERE Id = '${requestId}' LIMIT 1
+    `);
     if (lrResult.totalSize === 0) {
        return NextResponse.json({ error: "Leave request not found" }, { status: 404 });
     }
 
     const lr = lrResult.records[0] as any;
     
-    // Update Leave Request status
+    // Update Leave Request status and set Approver
     const newStatus = action === "approve" ? "Approved" : "Rejected";
     await updateRecord("Leave_Request__c", requestId, {
-      Status__c: newStatus
+      Status__c: newStatus,
+      Approver__c: manager.Id,
     });
     
-    // If approved, create history record
-    if (action === "approve") {
-      await createHistoryRecord({
-        employeeId: lr.Employee__c,
-        date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
-        type: "Leave Approved",
-        description: `${lr.Days__c} day(s) leave approved.`
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const leaveTypeName = lr.Leave_Type__r?.Name || "Leave";
+    const employeeName = lr.Employee__r?.Name || "Employee";
+    const days = lr.Days__c || 0;
+
+    // Create history record for the employee
+    await createHistoryRecord({
+      employeeId: lr.Employee__c,
+      date: today,
+      type: action === "approve" ? "Leave Approved" : "Leave Rejected",
+      description: `${days} day(s) of ${leaveTypeName} ${action === "approve" ? "approved" : "rejected"} by ${manager.Name || "Manager"}.`
+    });
+
+    // Create history record for the manager
+    await createHistoryRecord({
+      employeeId: manager.Id,
+      date: today,
+      type: action === "approve" ? "Approved Leave" : "Rejected Leave",
+      description: `${action === "approve" ? "Approved" : "Rejected"} ${days} day(s) of ${leaveTypeName} for ${employeeName}.`
+    });
+
+    // Create in-app notification for the employee
+    try {
+      await createRecord("Notification__c", {
+        Employee__c: lr.Employee__c,
+        Message__c: `Your ${leaveTypeName} request for ${days} day(s) has been ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`,
+        Type__c: "Leave",
+        Is_Read__c: false,
+        Related_Record_Id__c: requestId,
       });
+    } catch (notifErr) {
+      console.warn("Notification creation failed (non-fatal):", notifErr);
     }
     
     return NextResponse.json({ 

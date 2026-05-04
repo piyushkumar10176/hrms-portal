@@ -334,12 +334,13 @@ export async function getLeaveRequests(
  */
 export async function getPendingApprovals(managerEmployeeId: string): Promise<SFLeaveRequest[]> {
   return query<SFLeaveRequest>(`
-    SELECT Id, Name, Employee__r.Name, Employee__r.Official_Email__c,
+    SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
            Employee__r.Photograph__c, Leave_Type__r.Name, Leave_Type__r.Code__c,
            From_Date__c, To_Date__c, Days__c, Half_Day__c, Reason__c,
-           Status__c, CreatedDate
+           Status__c, Approver__c, Approver__r.Name, CreatedDate
     FROM Leave_Request__c
-    WHERE Approver__c = '${managerEmployeeId}'
+    WHERE (Approver__c = '${managerEmployeeId}'
+           OR Employee__r.Reporting_Manager__c = '${managerEmployeeId}')
     AND Status__c = 'Submitted'
     ORDER BY CreatedDate ASC
   `);
