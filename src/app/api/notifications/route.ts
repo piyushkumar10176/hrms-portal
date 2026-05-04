@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getSalesforceConnection } from "@/lib/salesforce-queries";
+import { getEmployeeByEmail } from "@/lib/salesforce-queries";
+import { getSalesforceConnection } from "@/lib/salesforce";
 
 export const dynamic = "force-dynamic";
 
