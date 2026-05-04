@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/mock-data";
 import { getEmployeeByEmail, getLeaveBalances } from '@/lib/salesforce-queries';
 
 export const dynamic = 'force-dynamic';
@@ -11,26 +10,26 @@ export async function GET() {
 
   try {
     const sfEmp = await getEmployeeByEmail(session.user.email);
-    if (sfEmp) {
-      const sfBalances = await getLeaveBalances(sfEmp.Id);
-      const balances = sfBalances.map(b => ({
-        leaveType: b.Leave_Type__r?.Name || "Leave",
-        total: b.Accrued__c + b.Opening_Balance__c,
-        used: b.Availed__c,
-        available: b.Closing_Balance__c
-      }));
-      // Provide some default balances if empty so UI looks good
-      if (balances.length === 0) {
-        return NextResponse.json({ balances: [
-          { leaveType: "Annual Leave", total: 20, used: 0, available: 20 },
-          { leaveType: "Sick Leave", total: 10, used: 0, available: 10 }
-        ], source: "salesforce-default" });
-      }
-      return NextResponse.json({ balances, source: "salesforce" });
+    const sfBalances = await getLeaveBalances(sfEmp.Id);
+    
+    const balances = sfBalances.map(b => ({
+      leaveType: b.Leave_Type__r?.Name || "Leave",
+      total: b.Accrued__c + b.Opening_Balance__c,
+      used: b.Availed__c,
+      available: b.Closing_Balance__c
+    }));
+    
+    // Provide some default balances if empty so UI looks good
+    if (balances.length === 0) {
+      return NextResponse.json({ balances: [
+        { leaveType: "Annual Leave", total: 20, used: 0, available: 20 },
+        { leaveType: "Sick Leave", total: 10, used: 0, available: 10 }
+      ], source: "salesforce-default" });
     }
+    
+    return NextResponse.json({ balances, source: "salesforce" });
   } catch (err) {
-    console.error("Salesforce getLeaveBalances fallback:", err);
+    console.error("Salesforce getLeaveBalances error:", err);
+    return NextResponse.json({ error: "Failed to fetch leave balances" }, { status: 500 });
   }
-
-  return NextResponse.json({ balances: db.getLeaveBalances(session.user.id), source: "local" });
 }

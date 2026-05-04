@@ -25,6 +25,7 @@ export interface SFEmployee {
   DOB__c?: string;
   Date_of_Joining__c: string;
   Employee_Status__c: string;
+  Role__c?: string;
   Photograph__c?: string;
   Department__c?: string;
   Designation__c?: string;
@@ -125,7 +126,7 @@ export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
   return queryOne<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
            Official_Email__c, Mobile__c, DOB__c,
-           Date_of_Joining__c, Employee_Status__c, Photograph__c, Gender__c,
+           Date_of_Joining__c, Employee_Status__c, Role__c, Photograph__c, Gender__c,
            Department__c, Designation__c,
            Reporting_Manager__c, Reporting_Manager__r.Name, 
            Reporting_Manager__r.Id, Reporting_Manager__r.Official_Email__c,
@@ -138,13 +139,31 @@ export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
 }
 
 /**
+ * Get the current employee's full profile by Id.
+ */
+export async function getEmployeeById(id: string): Promise<SFEmployee> {
+  return queryOne<SFEmployee>(`
+    SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
+           Official_Email__c, Mobile__c, DOB__c,
+           Date_of_Joining__c, Employee_Status__c, Role__c, Photograph__c, Gender__c,
+           Department__c, Designation__c,
+           Reporting_Manager__c, Reporting_Manager__r.Name, 
+           Reporting_Manager__r.Id, Reporting_Manager__r.Official_Email__c,
+           PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c
+    FROM Employee__c
+    WHERE Id = '${id}'
+    LIMIT 1
+  `);
+}
+
+/**
  * Get direct reports for a manager.
  */
 export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmployee[]> {
   return query<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
            Official_Email__c, Photograph__c, Department__c,
-           Designation__c, Employee_Status__c
+           Designation__c, Employee_Status__c, Role__c
     FROM Employee__c
     WHERE Reporting_Manager__c = '${managerEmployeeId}'
     AND Employee_Status__c = 'Active'
@@ -159,7 +178,7 @@ export async function getAllEmployees(): Promise<SFEmployee[]> {
   return query<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
            Official_Email__c, Photograph__c, Department__c,
-           Designation__c, Employee_Status__c, DOB__c,
+           Designation__c, Employee_Status__c, Role__c, DOB__c,
            Date_of_Joining__c, Reporting_Manager__c, Reporting_Manager__r.Name
     FROM Employee__c
     WHERE Employee_Status__c = 'Active'

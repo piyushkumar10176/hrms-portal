@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "salesforce": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-salesforce"],
+      "env": {
+        "SF_USERNAME": "YOUR_DEV_ORG_USERNAME",
+        "SF_PASSWORD": "YOUR_DEV_ORG_PASSWORD",
+        "SF_SECURITY_TOKEN": "YOUR_DEV_ORG_SECURITY_TOKEN"
+      }
+    }
+  }
+}

@@ -1,21 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/mock-data";
-import { getTodayPunches, createPunch as sfCreatePunch, createHistoryRecord } from "@/lib/salesforce-queries";
+import { getTodayPunches, createPunch as sfCreatePunch, createHistoryRecord, getEmployeeByEmail } from "@/lib/salesforce-queries";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    // Attempt to fetch from Salesforce
-    // We assume the sfEmployee Id is passed or we look it up.
-    // For MVP, if we don't have the SF record Id, this will fail and fallback.
-    const punches = await getTodayPunches(session.user.employeeId);
+    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const punches = await getTodayPunches(sfEmp.Id);
     
-    // Map Salesforce punches to the frontend format
+    // Check for the most recent punches today
     const clockInPunch = punches.find(p => p.Punch_Type__c === "Check-In");
-    const clockOutPunch = punches.find(p => p.Punch_Type__c === "Check-Out");
+    const clockOutPunch = [...punches].reverse().find(p => p.Punch_Type__c === "Check-Out");
     
     if (clockInPunch) {
       const today = {
@@ -28,9 +25,8 @@ export async function GET() {
       return NextResponse.json({ today: null });
     }
   } catch (error) {
-    console.error("Salesforce punch fetch error, falling back to mock data:", error);
-    const today = db.getTodayAttendance(session.user.id);
-    return NextResponse.json({ today });
+    console.error("Salesforce punch fetch error:", error);
+    return NextResponse.json({ error: "Failed to fetch punches" }, { status: 500 });
   }
 }
 
@@ -41,10 +37,11 @@ export async function POST(req: NextRequest) {
   const { action, latitude, longitude } = await req.json();
 
   try {
-    // Attempt to write to Salesforce
+    const sfEmp = await getEmployeeByEmail(session.user.email);
     const punchType = action === "clockIn" ? "Check-In" : "Check-Out";
+    
     await sfCreatePunch({
-      employeeId: session.user.employeeId, // Needs the actual SF Employee__c Id, but if not, will fallback
+      employeeId: sfEmp.Id,
       punchType,
       latitude,
       longitude,
@@ -53,26 +50,18 @@ export async function POST(req: NextRequest) {
     
     // Create history record in SF
     await createHistoryRecord({
-      employeeId: session.user.employeeId,
+      employeeId: sfEmp.Id,
       date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
       type: action === "clockIn" ? "Clock In" : "Clock Out",
       description: `Clocked ${action === "clockIn" ? "in" : "out"} at ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false })}`
     });
     
-    // In MVP, we can still fall through and update the mock data just so the UI works seamlessly if SF is missing fields
+    return NextResponse.json({ 
+      record: { action, time: new Date().toISOString() }, 
+      message: `Clocked ${action === "clockIn" ? "in" : "out"} successfully` 
+    });
   } catch (error) {
-    console.error("Salesforce punch create error, falling back to mock data only:", error);
+    console.error("Salesforce punch create error:", error);
+    return NextResponse.json({ error: "Failed to save punch" }, { status: 500 });
   }
-
-  // Update mock data so the UI continues to work regardless of SF success
-  if (action === "clockIn") {
-    const record = db.clockIn(session.user.id);
-    return NextResponse.json({ record, message: "Clocked in successfully" });
-  } else if (action === "clockOut") {
-    const record = db.clockOut(session.user.id);
-    if (!record) return NextResponse.json({ error: "Not clocked in" }, { status: 400 });
-    return NextResponse.json({ record, message: "Clocked out successfully" });
-  }
-
-  return NextResponse.json({ error: "Invalid action" }, { status: 400 });
 }
