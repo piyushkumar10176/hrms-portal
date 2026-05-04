@@ -37,9 +37,9 @@ export async function GET() {
         const balances = await getLeaveBalances(r.Id);
         const formattedBalances = balances.map(b => ({
           leaveType: b.Leave_Type__r?.Name || "Leave",
-          total: b.Accrued__c + b.Opening_Balance__c,
-          used: b.Availed__c,
-          available: b.Closing_Balance__c
+          total: (b.Accrued__c || 0) + (b.Opening_Balance__c || 0),
+          used: (b.Availed__c || 0),
+          available: (b.Closing_Balance__c || 0)
         }));
         const usedLeaves = formattedBalances.reduce((sum, b) => sum + b.used, 0);
         const totalLeaves = formattedBalances.reduce((sum, b) => sum + b.total, 0);

@@ -56,8 +56,13 @@ export async function POST(req: NextRequest) {
       description: `Clocked ${action === "clockIn" ? "in" : "out"} at ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false })}`
     });
     
+    const timeString = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
     return NextResponse.json({ 
-      record: { action, time: new Date().toISOString() }, 
+      record: { 
+        clockIn: action === "clockIn" ? timeString : null,
+        clockOut: action === "clockOut" ? timeString : null,
+        status: "Present"
+      }, 
       message: `Clocked ${action === "clockIn" ? "in" : "out"} successfully` 
     });
   } catch (error) {
