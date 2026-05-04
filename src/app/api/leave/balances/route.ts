@@ -16,9 +16,9 @@ export async function GET() {
     const balances = sfBalances.map((b, i) => ({
       leaveType: b.Leave_Type__r?.Name || "Leave",
       code: b.Leave_Type__r?.Code__c || (b.Leave_Type__r?.Name ? b.Leave_Type__r.Name.substring(0, 2).toUpperCase() : "LV"),
-      total: b.Accrued__c + b.Opening_Balance__c,
-      used: b.Availed__c,
-      available: b.Closing_Balance__c,
+      total: (b.Accrued__c || 0) + (b.Opening_Balance__c || 0),
+      used: (b.Availed__c || 0),
+      available: (b.Closing_Balance__c || 0),
       color: colors[i % colors.length]
     }));
     
