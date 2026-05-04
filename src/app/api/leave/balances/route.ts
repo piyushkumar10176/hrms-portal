@@ -12,18 +12,22 @@ export async function GET() {
     const sfEmp = await getEmployeeByEmail(session.user.email);
     const sfBalances = await getLeaveBalances(sfEmp.Id);
     
-    const balances = sfBalances.map(b => ({
+    const colors = ["#4F46E5", "#10B981", "#F59E0B", "#EF4444"];
+    const balances = sfBalances.map((b, i) => ({
       leaveType: b.Leave_Type__r?.Name || "Leave",
+      code: b.Leave_Type__r?.Code__c || (b.Leave_Type__r?.Name ? b.Leave_Type__r.Name.substring(0, 2).toUpperCase() : "LV"),
       total: b.Accrued__c + b.Opening_Balance__c,
       used: b.Availed__c,
-      available: b.Closing_Balance__c
+      available: b.Closing_Balance__c,
+      color: colors[i % colors.length]
     }));
     
     // Provide some default balances if empty so UI looks good
     if (balances.length === 0) {
       return NextResponse.json({ balances: [
-        { leaveType: "Annual Leave", total: 20, used: 0, available: 20 },
-        { leaveType: "Sick Leave", total: 10, used: 0, available: 10 }
+        { leaveType: "Annual Leave", code: "AL", total: 20, used: 0, available: 20, color: "#4F46E5" },
+        { leaveType: "Sick Leave", code: "SL", total: 10, used: 0, available: 10, color: "#10B981" },
+        { leaveType: "Casual Leave", code: "CL", total: 5, used: 0, available: 5, color: "#F59E0B" }
       ], source: "salesforce-default" });
     }
     
