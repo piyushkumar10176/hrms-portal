@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getTeamMembers, getTeamLeaveCalendar, getLeaveBalances, getAllEmployees } from "@/lib/salesforce-queries";
+import { getEmployeeByEmail, getTeamMembers, getTeamLeaveCalendar, getLeaveBalances, getAllEmployees, getHolidays } from "@/lib/salesforce-queries";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +84,16 @@ export async function GET() {
     
     birthdays.sort((a, b) => a.daysAway - b.daysAway);
     
-    return NextResponse.json({ birthdays, teamOnLeave, directReportsLeaves, source: "salesforce" });
+    // Fetch Holidays
+    const holidaysData = await getHolidays();
+    const holidays = holidaysData.map(h => ({
+      id: h.Id,
+      name: h.Name,
+      date: h.Date__c,
+      type: h.Type__c
+    }));
+    
+    return NextResponse.json({ birthdays, teamOnLeave, directReportsLeaves, holidays, source: "salesforce" });
   } catch (err) {
     console.error("Salesforce dashboard fetch error:", err);
     return NextResponse.json({ error: "Failed to fetch dashboard data" }, { status: 500 });

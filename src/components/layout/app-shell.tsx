@@ -64,7 +64,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       {/* Sidebar - Keka Style */}
       <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-[90px] flex flex-col items-center bg-[#2c2759] text-gray-300 transform transition-transform duration-200 ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}>
         <div className="flex flex-col items-center py-4 border-b border-[#3b3469] w-full">
-          <div className="text-2xl font-bold text-white tracking-tight">keka&quot;</div>
+          <div className="text-2xl font-bold text-white tracking-tight">HRMS</div>
         </div>
 
         <nav className="flex-1 py-4 flex flex-col gap-2 items-center w-full overflow-visible">

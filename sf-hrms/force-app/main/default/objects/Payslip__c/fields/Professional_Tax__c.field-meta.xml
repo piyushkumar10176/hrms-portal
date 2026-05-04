@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Professional_Tax__c</fullName>
+    <label>Professional Tax</label>
+    <precision>18</precision>
+    <scale>0</scale>
+    <type>Currency</type>
+</CustomField>

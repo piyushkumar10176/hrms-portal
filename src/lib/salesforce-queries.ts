@@ -427,3 +427,56 @@ export async function createHistoryRecord(data: {
     return null;
   }
 }
+
+// ============================================
+// Payslip Queries
+// ============================================
+
+export async function getPayslips(employeeId: string) {
+  try {
+    const records = await query<{
+      Id: string;
+      Month__c: string;
+      Basic__c: number;
+      HRA__c: number;
+      Conveyance__c: number;
+      Medical__c: number;
+      Special__c: number;
+      PF__c: number;
+      ESI__c: number;
+      Professional_Tax__c: number;
+      TDS__c: number;
+      Net_Pay__c: number;
+      Status__c: string;
+      Paid_On__c: string;
+    }>(`
+      SELECT Id, Month__c, Basic__c, HRA__c, Conveyance__c, Medical__c, Special__c,
+             PF__c, ESI__c, Professional_Tax__c, TDS__c, Net_Pay__c, Status__c, Paid_On__c
+      FROM Payslip__c
+      WHERE Employee__c = '${employeeId}'
+      ORDER BY Paid_On__c DESC
+    `);
+    
+    return records.map(r => ({
+      id: r.Id,
+      month: r.Month__c,
+      basic: r.Basic__c,
+      hra: r.HRA__c,
+      conveyance: r.Conveyance__c,
+      medical: r.Medical__c,
+      special: r.Special__c,
+      grossEarnings: r.Basic__c + r.HRA__c + r.Conveyance__c + r.Medical__c + r.Special__c,
+      pf: r.PF__c,
+      esi: r.ESI__c,
+      professionalTax: r.Professional_Tax__c,
+      tds: r.TDS__c,
+      totalDeductions: r.PF__c + r.ESI__c + r.Professional_Tax__c + r.TDS__c,
+      netPay: r.Net_Pay__c,
+      status: r.Status__c,
+      paidOn: r.Paid_On__c
+    }));
+  } catch (error) {
+    console.warn("Error querying Payslip__c:", error);
+    return [];
+  }
+}

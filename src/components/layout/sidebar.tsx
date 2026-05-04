@@ -51,7 +51,7 @@ export function Sidebar() {
     >
       {/* Logo */}
       <div className="flex flex-col items-center py-4 border-b border-[#3b3469]">
-        <div className="text-xl font-bold text-white tracking-tight">keka&quot;</div>
+        <div className="text-xl font-bold text-white tracking-tight">HRMS</div>
       </div>
 
       {/* Main Navigation */}
