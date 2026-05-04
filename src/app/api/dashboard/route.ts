@@ -40,7 +40,7 @@ export async function GET() {
           code: b.Leave_Type__r?.Code__c || (b.Leave_Type__r?.Name ? b.Leave_Type__r.Name.substring(0, 2).toUpperCase() : "LV"),
           total: (b.Accrued__c || 0) + (b.Opening_Balance__c || 0),
           used: (b.Availed__c || 0),
-          available: (b.Closing_Balance__c || 0)
+          available: ((b.Accrued__c || 0) + (b.Opening_Balance__c || 0)) - (b.Availed__c || 0)
         }));
         const usedLeaves = formattedBalances.reduce((sum, b) => sum + b.used, 0);
         const totalLeaves = formattedBalances.reduce((sum, b) => sum + b.total, 0);

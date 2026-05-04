@@ -62,34 +62,8 @@ export async function POST(req: NextRequest) {
       Status__c: newStatus
     });
     
-    // If approved, deduct balance
+    // If approved, create history record
     if (action === "approve") {
-      const currentYear = new Date().getFullYear().toString();
-      // Find the leave balance record
-      const lbResult = await conn.query(`SELECT Id, Availed__c, Closing_Balance__c FROM Leave_Balance__c WHERE Employee__c = '${lr.Employee__c}' AND Leave_Type__c = '${lr.Leave_Type__c}' AND Year__c = '${currentYear}' LIMIT 1`);
-      
-      if (lbResult.totalSize > 0) {
-        const lb = lbResult.records[0] as any;
-        const currentAvailed = lb.Availed__c || 0;
-        const currentClosing = lb.Closing_Balance__c || 0;
-        
-        await updateRecord("Leave_Balance__c", lb.Id, {
-          Availed__c: currentAvailed + lr.Days__c,
-          Closing_Balance__c: currentClosing - lr.Days__c
-        });
-      } else {
-        // Create balance if it does not exist
-        await createRecord("Leave_Balance__c", {
-          Employee__c: lr.Employee__c,
-          Leave_Type__c: lr.Leave_Type__c,
-          Year__c: currentYear,
-          Opening_Balance__c: 20, // Default opening for MVP
-          Availed__c: lr.Days__c,
-          Closing_Balance__c: 20 - lr.Days__c
-        });
-      }
-      
-      // Also create a History record
       await createHistoryRecord({
         employeeId: lr.Employee__c,
         date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
