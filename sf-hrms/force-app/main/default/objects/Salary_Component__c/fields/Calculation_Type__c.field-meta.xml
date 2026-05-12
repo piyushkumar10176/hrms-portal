@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Calculation_Type__c</fullName>
+    <label>Calculation Type</label>
+    <type>Picklist</type>
+    <valueSet><restricted>true</restricted><valueSetDefinition><sorted>false</sorted>
+        <value><fullName>Fixed</fullName><default>true</default><label>Fixed</label></value>
+        <value><fullName>Percentage_of_Basic</fullName><default>false</default><label>Percentage of Basic</label></value>
+        <value><fullName>Percentage_of_CTC</fullName><default>false</default><label>Percentage of CTC</label></value>
+    </valueSetDefinition></valueSet>
+</CustomField>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Salary_Component__c</fullName>
+    <label>Salary Component</label>
+    <referenceTo>Salary_Component__c</referenceTo>
+    <relationshipLabel>Employee Structures</relationshipLabel>
+    <relationshipName>Employee_Structures</relationshipName>
+    <type>Lookup</type>
+    <required>true</required>
+    <deleteConstraint>Restrict</deleteConstraint>
+</CustomField>
