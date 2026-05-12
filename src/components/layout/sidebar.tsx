@@ -33,7 +33,16 @@ const navigation = [
   },
   { name: "Inbox", href: "/approvals", icon: Inbox },
   { name: "My Team", href: "/team", icon: Users },
-  { name: "My Finances", href: "/payroll", icon: DollarSign },
+  { 
+    name: "My Finances", 
+    href: "#", 
+    icon: DollarSign,
+    subMenu: [
+      { name: "Payslips", href: "/payroll" },
+      { name: "Salary Structure", href: "/payroll?tab=structure" },
+      { name: "Tax Declarations", href: "/payroll?tab=tax" },
+    ]
+  },
   { name: "Org", href: "/organisation", icon: Building2 },
 ];
 

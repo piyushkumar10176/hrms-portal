@@ -480,3 +480,163 @@ export async function getPayslips(employeeId: string) {
     return [];
   }
 }
+
+// ============================================
+// Salary Structure Queries
+// ============================================
+
+export async function getSalaryStructure(employeeId: string) {
+  try {
+    const records = await query<{
+      Id: string;
+      Name: string;
+      Salary_Component__r: { Name: string; Component_Type__c: string; Is_Taxable__c: boolean; Is_Statutory__c: boolean; Display_Order__c: number };
+      Monthly_Amount__c: number;
+      Annual_Amount__c: number;
+      CTC__c: number;
+      Effective_Date__c: string;
+    }>(`
+      SELECT Id, Name,
+             Salary_Component__r.Name, Salary_Component__r.Component_Type__c,
+             Salary_Component__r.Is_Taxable__c, Salary_Component__r.Is_Statutory__c,
+             Salary_Component__r.Display_Order__c,
+             Monthly_Amount__c, Annual_Amount__c, CTC__c, Effective_Date__c
+      FROM Employee_Salary_Structure__c
+      WHERE Employee__c = '${employeeId}'
+      ORDER BY Salary_Component__r.Display_Order__c ASC
+    `);
+
+    const earnings = records.filter(r => r.Salary_Component__r.Component_Type__c === 'Earning');
+    const deductions = records.filter(r => r.Salary_Component__r.Component_Type__c === 'Deduction');
+    const ctc = records.length > 0 ? records[0].CTC__c : 0;
+    const grossMonthly = earnings.reduce((sum, r) => sum + (r.Monthly_Amount__c || 0), 0);
+    const totalDeductions = deductions.reduce((sum, r) => sum + (r.Monthly_Amount__c || 0), 0);
+
+    return {
+      ctc,
+      grossMonthly,
+      netMonthly: grossMonthly - totalDeductions,
+      effectiveDate: records.length > 0 ? records[0].Effective_Date__c : null,
+      earnings: earnings.map(r => ({
+        id: r.Id,
+        component: r.Salary_Component__r.Name,
+        monthly: r.Monthly_Amount__c,
+        annual: r.Annual_Amount__c,
+        isTaxable: r.Salary_Component__r.Is_Taxable__c,
+      })),
+      deductions: deductions.map(r => ({
+        id: r.Id,
+        component: r.Salary_Component__r.Name,
+        monthly: r.Monthly_Amount__c,
+        annual: r.Annual_Amount__c,
+        isStatutory: r.Salary_Component__r.Is_Statutory__c,
+      })),
+    };
+  } catch (error) {
+    console.warn("Error querying Employee_Salary_Structure__c:", error);
+    return { ctc: 0, grossMonthly: 0, netMonthly: 0, effectiveDate: null, earnings: [], deductions: [] };
+  }
+}
+
+// ============================================
+// Tax Declaration Queries
+// ============================================
+
+export async function getTaxDeclaration(employeeId: string, fy?: string) {
+  try {
+    const financialYear = fy || getCurrentFinancialYear();
+    const record = await queryOneOrNull<{
+      Id: string;
+      Financial_Year__c: string;
+      Tax_Regime__c: string;
+      Section_80C__c: number;
+      Section_80D__c: number;
+      Section_80G__c: number;
+      HRA_Rent_Paid__c: number;
+      Landlord_PAN__c: string;
+      Home_Loan_Interest__c: number;
+      Other_Income__c: number;
+      Previous_Employer_TDS__c: number;
+      Status__c: string;
+    }>(`
+      SELECT Id, Financial_Year__c, Tax_Regime__c,
+             Section_80C__c, Section_80D__c, Section_80G__c,
+             HRA_Rent_Paid__c, Landlord_PAN__c, Home_Loan_Interest__c,
+             Other_Income__c, Previous_Employer_TDS__c, Status__c
+      FROM Tax_Declaration__c
+      WHERE Employee__c = '${employeeId}' AND Financial_Year__c = '${financialYear}'
+      LIMIT 1
+    `);
+
+    if (!record) return null;
+
+    return {
+      id: record.Id,
+      financialYear: record.Financial_Year__c,
+      taxRegime: record.Tax_Regime__c,
+      section80C: record.Section_80C__c || 0,
+      section80D: record.Section_80D__c || 0,
+      section80G: record.Section_80G__c || 0,
+      hraRentPaid: record.HRA_Rent_Paid__c || 0,
+      landlordPAN: record.Landlord_PAN__c || '',
+      homeLoanInterest: record.Home_Loan_Interest__c || 0,
+      otherIncome: record.Other_Income__c || 0,
+      previousEmployerTDS: record.Previous_Employer_TDS__c || 0,
+      status: record.Status__c,
+    };
+  } catch (error) {
+    console.warn("Error querying Tax_Declaration__c:", error);
+    return null;
+  }
+}
+
+function getCurrentFinancialYear(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
+  if (month >= 4) return `${year}-${year + 1}`;
+  return `${year - 1}-${year}`;
+}
+
+// ============================================
+// Payroll Cycle Queries
+// ============================================
+
+export async function getPayrollCycles() {
+  try {
+    const records = await query<{
+      Id: string;
+      Name: string;
+      Month__c: string;
+      Year__c: number;
+      Start_Date__c: string;
+      End_Date__c: string;
+      Status__c: string;
+      Total_Gross__c: number;
+      Total_Net__c: number;
+      Total_Employees__c: number;
+    }>(`
+      SELECT Id, Name, Month__c, Year__c, Start_Date__c, End_Date__c,
+             Status__c, Total_Gross__c, Total_Net__c, Total_Employees__c
+      FROM Payroll_Cycle__c
+      ORDER BY Year__c DESC, Start_Date__c DESC
+      LIMIT 12
+    `);
+
+    return records.map(r => ({
+      id: r.Id,
+      name: r.Name,
+      month: r.Month__c,
+      year: r.Year__c,
+      startDate: r.Start_Date__c,
+      endDate: r.End_Date__c,
+      status: r.Status__c,
+      totalGross: r.Total_Gross__c || 0,
+      totalNet: r.Total_Net__c || 0,
+      totalEmployees: r.Total_Employees__c || 0,
+    }));
+  } catch (error) {
+    console.warn("Error querying Payroll_Cycle__c:", error);
+    return [];
+  }
+}
