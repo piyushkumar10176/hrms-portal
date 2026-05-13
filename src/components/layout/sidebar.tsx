@@ -31,6 +31,7 @@ const baseNavigation = [
       { name: "Attendance", href: "/attendance" },
       { name: "Leave", href: "/leave" },
       { name: "Performance", href: "/profile" },
+      { name: "Documents", href: "/profile/documents" },
     ]
   },
   { name: "Inbox", href: "/approvals", icon: Inbox },
@@ -66,6 +67,7 @@ export function Sidebar() {
         { name: "Employees", href: "/admin/employees" },
         { name: "Departments", href: "/admin/departments" },
         { name: "Designations", href: "/admin/designations" },
+        { name: "Onboarding", href: "/admin/onboarding" },
       ]
     }] : [])
   ];
