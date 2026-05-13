@@ -70,14 +70,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (body.departmentId !== undefined) allowedUpdates.Department_Ref__c = body.departmentId || null;
   if (body.designation !== undefined) allowedUpdates.Designation__c = body.designation;
   if (body.designationId !== undefined) allowedUpdates.Designation_Ref__c = body.designationId || null;
-  if (body.dateOfJoining !== undefined) allowedUpdates.Date_of_Joining__c = body.dateOfJoining;
+  if (body.dateOfJoining !== undefined) allowedUpdates.Date_of_Joining__c = body.dateOfJoining || null;
   if (body.employmentType !== undefined) allowedUpdates.Employment_Type__c = body.employmentType;
   if (body.probationEndDate !== undefined) allowedUpdates.Probation_End_Date__c = body.probationEndDate || null;
   if (body.confirmationDate !== undefined) allowedUpdates.Confirmation_Date__c = body.confirmationDate || null;
   if (body.resignationDate !== undefined) allowedUpdates.Resignation_Date__c = body.resignationDate || null;
   if (body.lwd !== undefined) allowedUpdates.LWD__c = body.lwd || null;
-  if (body.reportingManagerId !== undefined) allowedUpdates.Reporting_Manager__c = body.reportingManagerId;
-  if (body.dateOfBirth !== undefined) allowedUpdates.DOB__c = body.dateOfBirth;
+  if (body.reportingManagerId !== undefined) allowedUpdates.Reporting_Manager__c = body.reportingManagerId || null;
+  if (body.dateOfBirth !== undefined) allowedUpdates.DOB__c = body.dateOfBirth || null;
   if (body.gender !== undefined) allowedUpdates.Gender__c = body.gender;
   if (body.status !== undefined) allowedUpdates.Employee_Status__c = body.status;
   if (body.bankName !== undefined) allowedUpdates.Bank_Name__c = body.bankName;
