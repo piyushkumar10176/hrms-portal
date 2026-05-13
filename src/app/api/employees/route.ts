@@ -30,6 +30,7 @@ export async function GET() {
       resignationDate: emp.Resignation_Date__c,
       lwd: emp.LWD__c,
       reportingManager: emp.Reporting_Manager__r?.Name || "-",
+      reportingManagerId: emp.Reporting_Manager__c || null,
       role: emp.Role__c ? emp.Role__c.toLowerCase() : "employee",
     }));
     return NextResponse.json({ employees, source: "salesforce" });

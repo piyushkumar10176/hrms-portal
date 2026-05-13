@@ -10,6 +10,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compareSync } from "bcryptjs";
 import { queryOneOrNull } from "./salesforce";
+import { authConfig } from "./auth.config";
 
 declare module "next-auth" {
   interface User {
@@ -41,6 +42,7 @@ declare module "@auth/core/jwt" {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  ...authConfig,
   providers: [
     Credentials({
       name: "credentials",
@@ -96,29 +98,4 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.sub = user.id;
-        token.employeeId = user.employeeId;
-        token.role = user.role;
-        token.department = user.department;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (!token.sub) return session; // Reject sessions without a valid user ID
-      session.user.id = token.sub;
-      session.user.employeeId = (token.employeeId as string) || "";
-      session.user.role = (token.role as string) || "employee";
-      session.user.department = (token.department as string) || "";
-      return session;
-    },
-  },
-  pages: {
-    signIn: "/login",
-  },
-  session: { strategy: "jwt" },
-  trustHost: true,
-  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
 });

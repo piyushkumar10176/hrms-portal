@@ -1,7 +1,10 @@
-import { auth } from "@/lib/auth";
+import NextAuth from "next-auth";
+import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 
-export default auth((req) => {
+export const { auth: middleware } = NextAuth(authConfig);
+
+export default middleware((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes — accessible without authentication
