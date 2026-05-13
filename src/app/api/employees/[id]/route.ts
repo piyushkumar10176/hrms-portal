@@ -88,8 +88,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
   }
 
+  console.log(`[Employee PUT] Attempting to update employee ${id} with:`, allowedUpdates);
+
   try {
     await updateRecord("Employee__c", id, allowedUpdates);
+    console.log(`[Employee PUT] Successfully updated employee ${id}`);
     
     // Fetch updated record to return
     const sfEmp = await getEmployeeById(id);
@@ -120,9 +123,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       role: sfEmp.Role__c?.toLowerCase() || "employee"
     };
 
-    return NextResponse.json({ employee: updated }, { status: 200 });
-  } catch (err) {
-    console.error("Salesforce updateEmployee error:", err);
-    return NextResponse.json({ error: "Failed to update employee" }, { status: 500 });
+    return NextResponse.json({ employee: updated, source: "salesforce" });
+  } catch (err: any) {
+    console.error("[Employee PUT] Salesforce updateRecord error:", err);
+    console.error("[Employee PUT] Error message:", err.message);
+    if (err.errorCode) console.error("[Employee PUT] Error code:", err.errorCode);
+    if (err.fields) console.error("[Employee PUT] Error fields:", err.fields);
+    return NextResponse.json({ error: err.message || "Failed to update employee" }, { status: 500 });
   }
 }
