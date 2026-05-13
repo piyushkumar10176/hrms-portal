@@ -42,6 +42,8 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json();
   const token = randomUUID();
+  // Token expires in 7 days
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
   
   try {
     const sfId = await createRecord("Employee__c", {
@@ -50,44 +52,24 @@ export async function POST(req: NextRequest) {
       Name: `${body.firstName} ${body.lastName}`,
       Official_Email__c: body.email,
       Mobile__c: body.phone,
-      Department__c: body.department, // Assuming it's text for now, ideally picklist or lookup
+      Department__c: body.department,
       Designation__c: body.designation,
       Date_of_Joining__c: body.dateOfJoining || new Date().toISOString().split("T")[0],
       Employee_Status__c: "Active",
-      Gender__c: body.gender
+      Gender__c: body.gender,
+      Invite_Token__c: token,
+      Invite_Token_Expires_At__c: expiresAt,
     });
     
     const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
     const inviteLink = `${baseUrl}/setup-password/${token}`;
-    
-    // In a real app we would send the email or create a user in auth DB
-    // Currently relying on local DB for auth
-    const { db } = await import("@/lib/mock-data");
-    db.addEmployee({
-      employeeId: sfId,
-      firstName: body.firstName,
-      lastName: body.lastName,
-      email: body.email,
-      phone: body.phone || "",
-      department: body.department,
-      designation: body.designation,
-      dateOfJoining: body.dateOfJoining || new Date().toISOString().split("T")[0],
-      reportingManagerId: body.reportingManagerId || null,
-      role: body.role || "employee",
-      status: "Active",
-      password: "", // Empty until they set it via invite
-      inviteToken: token,
-      gender: body.gender,
-      city: body.city,
-      dateOfBirth: body.dateOfBirth,
-      address: body.address,
-    });
 
     console.log(`\n============================`);
-    console.log(`📧 MOCK EMAIL SENT TO: ${body.email}`);
+    console.log(`📧 INVITE SENT TO: ${body.email}`);
     console.log(`Subject: Welcome to HRMS! Please setup your account`);
     console.log(`Body: Click here to set your password and log in: ${inviteLink}`);
     console.log(`Salesforce Record ID: ${sfId}`);
+    console.log(`Token expires: ${expiresAt}`);
     console.log(`============================\n`);
 
     return NextResponse.json({ 

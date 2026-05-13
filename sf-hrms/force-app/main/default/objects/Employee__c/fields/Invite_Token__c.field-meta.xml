@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Invite_Token__c</fullName>
+    <label>Invite Token</label>
+    <type>Text</type>
+    <length>64</length>
+    <required>false</required>
+    <unique>false</unique>
+    <externalId>false</externalId>
+    <description>One-time token for password setup invitation during employee onboarding</description>
+    <inlineHelpText>Auto-generated token for employee onboarding — do not edit</inlineHelpText>
+</CustomField>

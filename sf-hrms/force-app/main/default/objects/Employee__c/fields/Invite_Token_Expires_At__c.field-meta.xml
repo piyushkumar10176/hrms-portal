@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Invite_Token_Expires_At__c</fullName>
+    <label>Invite Token Expires At</label>
+    <type>DateTime</type>
+    <required>false</required>
+    <description>Expiry timestamp for the invite token — token is invalid after this date/time</description>
+    <inlineHelpText>Token becomes invalid after this date/time</inlineHelpText>
+</CustomField>

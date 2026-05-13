@@ -1,13 +1,15 @@
 /**
  * NextAuth.js v5 Configuration
  * 
- * Supports: Credentials login (email/password from mock data)
- * Roles: admin, employee (stored in JWT token)
+ * Salesforce-backed authentication.
+ * Reads Password_Hash__c from Employee__c for credential verification.
+ * No local data store. All auth state lives in SF.
  */
 
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { db } from "./mock-data";
+import { compareSync } from "bcryptjs";
+import { queryOneOrNull } from "./salesforce";
 
 declare module "next-auth" {
   interface User {
@@ -52,19 +54,43 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (!email || !password) return null;
 
-        const employee = db.authenticate(email, password);
-        if (!employee) return null;
+        try {
+          const emp = await queryOneOrNull<{
+            Id: string;
+            Official_Email__c: string;
+            Password_Hash__c: string;
+            First_Name__c: string;
+            Last_Name__c: string;
+            Employee_Code__c: string;
+            Role__c: string;
+            Department__c: string;
+            Employee_Status__c: string;
+          }>(`
+            SELECT Id, Official_Email__c, Password_Hash__c, First_Name__c, Last_Name__c,
+                   Employee_Code__c, Role__c, Department__c, Employee_Status__c
+            FROM Employee__c
+            WHERE Official_Email__c = '${email.replace(/'/g, "\\'")}'
+              AND Employee_Status__c = 'Active'
+            LIMIT 1
+          `);
 
-        return {
-          id: employee.id,
-          email: employee.email,
-          name: `${employee.firstName} ${employee.lastName}`,
-          employeeId: employee.employeeId,
-          role: employee.role,
-          department: employee.department,
-          firstName: employee.firstName,
-          lastName: employee.lastName,
-        };
+          if (!emp || !emp.Password_Hash__c) return null;
+          if (!compareSync(password, emp.Password_Hash__c)) return null;
+
+          return {
+            id: emp.Id,
+            email: emp.Official_Email__c,
+            name: `${emp.First_Name__c} ${emp.Last_Name__c}`,
+            employeeId: emp.Employee_Code__c,
+            role: emp.Role__c?.toLowerCase() || "employee",
+            department: emp.Department__c || "",
+            firstName: emp.First_Name__c,
+            lastName: emp.Last_Name__c,
+          };
+        } catch (err) {
+          console.error("[Auth] Salesforce login error:", err);
+          return null;
+        }
       },
     }),
   ],
