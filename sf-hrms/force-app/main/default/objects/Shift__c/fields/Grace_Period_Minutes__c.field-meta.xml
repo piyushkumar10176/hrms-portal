@@ -1,8 +1,1 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
-    <fullName>Grace_Period_Minutes__c</fullName>
-    <label>Grace Period Minutes</label>
-    <type>Number</type>
-    <precision>4</precision>
-    <scale>0</scale>
-</CustomField>
+<?xml version="1.0" encoding="UTF-8"?><CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Grace_Period_Minutes__c</fullName><label>Grace Period (Minutes)</label><type>Number</type><precision>3</precision><scale>0</scale><defaultValue>15</defaultValue></CustomField>

@@ -30,6 +30,7 @@ const baseNavigation = [
     subMenu: [
       { name: "Attendance", href: "/attendance" },
       { name: "Leave", href: "/leave" },
+      { name: "Regularization", href: "/regularization" },
       { name: "Performance", href: "/profile" },
       { name: "Documents", href: "/profile/documents" },
     ]

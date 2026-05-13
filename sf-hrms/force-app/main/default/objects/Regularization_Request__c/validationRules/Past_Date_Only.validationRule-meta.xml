@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Past_Date_Only</fullName>
+    <active>true</active>
+    <errorConditionFormula>Date__c &gt; TODAY()</errorConditionFormula>
+    <errorMessage>Regularization can only be requested for past dates.</errorMessage>
+</ValidationRule>
