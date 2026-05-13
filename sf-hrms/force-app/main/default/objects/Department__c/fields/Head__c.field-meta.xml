@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Head__c</fullName>
+    <label>Department Head</label>
+    <type>Lookup</type>
+    <referenceTo>Employee__c</referenceTo>
+    <relationshipName>Headed_Departments</relationshipName>
+    <relationshipLabel>Departments Headed</relationshipLabel>
+    <required>false</required>
+    <description>Employee who heads this department</description>
+    <inlineHelpText>Select the employee who leads this department</inlineHelpText>
+</CustomField>

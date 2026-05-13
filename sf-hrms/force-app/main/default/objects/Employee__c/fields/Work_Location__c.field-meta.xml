@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Work_Location__c</fullName>
+    <label>Work Location</label>
+    <type>Lookup</type>
+    <referenceTo>Location__c</referenceTo>
+    <relationshipName>Employees</relationshipName>
+    <relationshipLabel>Employees</relationshipLabel>
+    <required>false</required>
+    <description>Primary work location of the employee</description>
+    <inlineHelpText>Select the office or work location for this employee</inlineHelpText>
+</CustomField>

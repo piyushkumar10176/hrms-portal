@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Department_Ref__c</fullName>
+    <label>Department (Lookup)</label>
+    <type>Lookup</type>
+    <referenceTo>Department__c</referenceTo>
+    <relationshipName>Employees</relationshipName>
+    <relationshipLabel>Employees</relationshipLabel>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <description>Structured department lookup — replaces legacy text Department__c field</description>
+    <inlineHelpText>Select the employee's department from the dropdown</inlineHelpText>
+</CustomField>

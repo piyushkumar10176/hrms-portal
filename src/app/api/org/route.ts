@@ -14,8 +14,8 @@ export async function GET() {
     const tree = sfEmployees.map(e => ({
       id: e.Id,
       name: e.Name,
-      designation: e.Designation__c || "Employee",
-      department: e.Department__c || "General",
+      designation: e.Designation_Ref__r?.Name || e.Designation__c || "Employee",
+      department: e.Department_Ref__r?.Name || e.Department__c || "General",
       managerId: e.Reporting_Manager__c || null,
       employeeId: e.Employee_Code__c || e.Id
     }));
@@ -23,15 +23,15 @@ export async function GET() {
     const employees = sfEmployees.map(e => {
       const directReports = sfEmployees
         .filter(r => r.Reporting_Manager__c === e.Id)
-        .map(r => ({ id: r.Id, name: r.Name, designation: r.Designation__c || "Employee" }));
+        .map(r => ({ id: r.Id, name: r.Name, designation: r.Designation_Ref__r?.Name || r.Designation__c || "Employee" }));
       
       return {
         id: e.Id,
         firstName: e.First_Name__c || e.Name.split(" ")[0],
         lastName: e.Last_Name__c || e.Name.split(" ")[1] || "",
         employeeId: e.Employee_Code__c || e.Id,
-        department: e.Department__c || "",
-        designation: e.Designation__c || "",
+        department: e.Department_Ref__r?.Name || e.Department__c || "",
+        designation: e.Designation_Ref__r?.Name || e.Designation__c || "",
         email: e.Official_Email__c,
         dateOfJoining: e.Date_of_Joining__c,
         managerId: e.Reporting_Manager__c || null,

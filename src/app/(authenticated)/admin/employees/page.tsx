@@ -8,11 +8,21 @@ interface Employee {
   email: string; phone: string; department: string; designation: string;
   dateOfJoining: string; role: string; status: string; city?: string; reportingManagerId?: string | null;
   dateOfBirth?: string;
+  employmentType?: string;
+  probationEndDate?: string;
+  confirmationDate?: string;
+  resignationDate?: string;
+  lwd?: string;
 }
+
+interface Department { id: string; name: string; code: string; status: string; }
+interface Designation { id: string; name: string; code: string; status: string; departmentId: string | null; }
 
 export default function AdminEmployeesPage() {
   const { data: session } = useSession();
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [designations, setDesignations] = useState<Designation[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [search, setSearch] = useState("");
   const [msg, setMsg] = useState<{text:string, type:string}|null>(null);
@@ -20,9 +30,9 @@ export default function AdminEmployeesPage() {
   const formRef = useRef<HTMLDivElement>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState({
-    firstName: "", lastName: "", email: "", phone: "", department: "Engineering",
-    designation: "", dateOfJoining: "", role: "employee", gender: "", city: "", reportingManagerId: "",
-    dateOfBirth: ""
+    firstName: "", lastName: "", email: "", phone: "", departmentId: "",
+    designationId: "", dateOfJoining: "", role: "employee", gender: "", city: "", reportingManagerId: "",
+    dateOfBirth: "", employmentType: "Full-Time", probationEndDate: "", confirmationDate: "", resignationDate: "", lwd: ""
   });
 
   const isAdmin = session?.user?.role === "admin";
@@ -39,9 +49,19 @@ export default function AdminEmployeesPage() {
     });
   };
 
+  const fetchDepartments = () => {
+    fetch("/api/departments").then(r => r.json()).then(d => setDepartments((d.departments || []).filter((dep: Department) => dep.status === "Active")));
+  };
+
+  const fetchDesignations = () => {
+    fetch("/api/designations").then(r => r.json()).then(d => setDesignations((d.designations || []).filter((des: Designation) => des.status === "Active")));
+  };
+
   useEffect(() => {
     if (session) {
       fetchEmployees();
+      fetchDepartments();
+      fetchDesignations();
     }
   }, [session]);
 
@@ -75,9 +95,16 @@ export default function AdminEmployeesPage() {
     setEditingId(emp.id);
     setForm({
       firstName: emp.firstName, lastName: emp.lastName, email: emp.email, phone: emp.phone || "",
-      department: emp.department, designation: emp.designation, dateOfJoining: emp.dateOfJoining,
+      departmentId: departments.find(d => d.name === emp.department)?.id || "",
+      designationId: designations.find(d => d.name === emp.designation)?.id || "",
+      dateOfJoining: emp.dateOfJoining,
       role: emp.role, gender: "", city: emp.city || "", reportingManagerId: emp.reportingManagerId || "",
-      dateOfBirth: emp.dateOfBirth || ""
+      dateOfBirth: emp.dateOfBirth || "",
+      employmentType: emp.employmentType || "Full-Time",
+      probationEndDate: emp.probationEndDate || "",
+      confirmationDate: emp.confirmationDate || "",
+      resignationDate: emp.resignationDate || "",
+      lwd: emp.lwd || ""
     });
     setShowForm(true);
     setMsg(null);
@@ -88,7 +115,7 @@ export default function AdminEmployeesPage() {
 
   const openAdd = () => {
     setEditingId(null);
-    setForm({ firstName: "", lastName: "", email: "", phone: "", department: "Engineering", designation: "", dateOfJoining: "", role: "employee", gender: "", city: "", reportingManagerId: "", dateOfBirth: "" });
+    setForm({ firstName: "", lastName: "", email: "", phone: "", departmentId: "", designationId: "", dateOfJoining: "", role: "employee", gender: "", city: "", reportingManagerId: "", dateOfBirth: "", employmentType: "Full-Time", probationEndDate: "", confirmationDate: "", resignationDate: "", lwd: "" });
     setShowForm(true);
     setMsg(null);
     setTimeout(() => {
@@ -126,10 +153,13 @@ export default function AdminEmployeesPage() {
               { label: "Last Name *", key: "lastName", type: "text" },
               { label: "Email *", key: "email", type: "email" },
               { label: "Phone", key: "phone", type: "tel" },
-              { label: "Designation", key: "designation", type: "text" },
               { label: "Date of Joining", key: "dateOfJoining", type: "date" },
               { label: "Birth Date", key: "dateOfBirth", type: "date" },
               { label: "City", key: "city", type: "text" },
+              { label: "Probation End Date", key: "probationEndDate", type: "date" },
+              { label: "Confirmation Date", key: "confirmationDate", type: "date" },
+              { label: "Resignation Date", key: "resignationDate", type: "date" },
+              { label: "Last Working Day", key: "lwd", type: "date" },
             ].map(f => (
               <div key={f.key}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">{f.label}</label>
@@ -139,9 +169,19 @@ export default function AdminEmployeesPage() {
             ))}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
-              <select value={form.department} onChange={e => setForm({ ...form, department: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                {["Executive", "Engineering", "Design", "Sales", "Marketing", "HR", "Finance", "Management", "Operations"].map(d => (
-                  <option key={d} value={d}>{d}</option>
+              <select value={form.departmentId} onChange={e => setForm({ ...form, departmentId: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Select Department</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Designation</label>
+              <select value={form.designationId} onChange={e => setForm({ ...form, designationId: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">Select Designation</option>
+                {designations.map(d => (
+                  <option key={d.id} value={d.id}>{d.name}</option>
                 ))}
               </select>
             </div>
@@ -150,6 +190,15 @@ export default function AdminEmployeesPage() {
               <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 <option value="employee">Employee</option>
                 <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Employment Type</label>
+              <select value={form.employmentType} onChange={e => setForm({ ...form, employmentType: e.target.value })} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="Full-Time">Full-Time</option>
+                <option value="Part-Time">Part-Time</option>
+                <option value="Contract">Contract</option>
+                <option value="Internship">Internship</option>
               </select>
             </div>
             <div>

@@ -16,10 +16,12 @@ import {
   PalmtreeIcon,
   ChevronRight,
   ChevronLeft,
-  CheckSquare
+  CheckSquare,
+  Settings
 } from "lucide-react";
+import { useSession } from "next-auth/react";
 
-const navigation = [
+const baseNavigation = [
   { name: "Home", href: "/dashboard", icon: Home },
   { 
     name: "Me", 
@@ -48,8 +50,25 @@ const navigation = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { data: session } = useSession();
   const [collapsed, setCollapsed] = useState(false);
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
+
+  const isAdmin = session?.user?.role === "admin";
+
+  const navigation = [
+    ...baseNavigation,
+    ...(isAdmin ? [{
+      name: "Admin",
+      href: "#",
+      icon: Settings,
+      subMenu: [
+        { name: "Employees", href: "/admin/employees" },
+        { name: "Departments", href: "/admin/departments" },
+        { name: "Designations", href: "/admin/designations" },
+      ]
+    }] : [])
+  ];
 
   return (
     <aside

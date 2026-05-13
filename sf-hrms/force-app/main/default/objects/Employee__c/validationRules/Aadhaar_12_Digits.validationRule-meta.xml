@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Aadhaar_12_Digits</fullName>
+    <active>true</active>
+    <errorConditionFormula>AND(NOT(ISBLANK(Aadhaar__c)), LEN(Aadhaar__c) != 12)</errorConditionFormula>
+    <errorDisplayField>Aadhaar__c</errorDisplayField>
+    <errorMessage>Aadhaar number must be exactly 12 digits.</errorMessage>
+    <description>Validates Aadhaar card number is exactly 12 characters</description>
+</ValidationRule>

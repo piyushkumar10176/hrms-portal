@@ -64,10 +64,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             Employee_Code__c: string;
             Role__c: string;
             Department__c: string;
+            Department_Ref__c?: string;
+            Department_Ref__r?: { Name: string };
             Employee_Status__c: string;
           }>(`
             SELECT Id, Official_Email__c, Password_Hash__c, First_Name__c, Last_Name__c,
-                   Employee_Code__c, Role__c, Department__c, Employee_Status__c
+                   Employee_Code__c, Role__c, Department__c, Department_Ref__c, Department_Ref__r.Name, Employee_Status__c
             FROM Employee__c
             WHERE Official_Email__c = '${email.replace(/'/g, "\\'")}'
               AND Employee_Status__c = 'Active'
@@ -83,7 +85,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             name: `${emp.First_Name__c} ${emp.Last_Name__c}`,
             employeeId: emp.Employee_Code__c,
             role: emp.Role__c?.toLowerCase() || "employee",
-            department: emp.Department__c || "",
+            department: emp.Department_Ref__r?.Name || emp.Department__c || "",
             firstName: emp.First_Name__c,
             lastName: emp.Last_Name__c,
           };

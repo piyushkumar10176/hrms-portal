@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>No_Self_Manage</fullName>
+    <active>true</active>
+    <errorConditionFormula>Reporting_Manager__c = Id</errorConditionFormula>
+    <errorDisplayField>Reporting_Manager__c</errorDisplayField>
+    <errorMessage>An employee cannot be their own reporting manager.</errorMessage>
+    <description>Prevents an employee from being assigned as their own reporting manager</description>
+</ValidationRule>

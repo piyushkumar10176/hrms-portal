@@ -37,6 +37,15 @@ export interface SFEmployee {
   Bank_Account_Number__c?: string;
   Bank_Name__c?: string;
   IFSC_Code__c?: string;
+  Department_Ref__c?: string;
+  Department_Ref__r?: { Name: string; Code__c: string };
+  Designation_Ref__c?: string;
+  Designation_Ref__r?: { Name: string; Code__c: string; Grade__c?: number };
+  Employment_Type__c?: string;
+  Probation_End_Date__c?: string;
+  Confirmation_Date__c?: string;
+  Resignation_Date__c?: string;
+  LWD__c?: string;
 }
 
 export interface SFAttendancePunch {
@@ -130,7 +139,10 @@ export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
            Department__c, Designation__c,
            Reporting_Manager__c, Reporting_Manager__r.Name, 
            Reporting_Manager__r.Id, Reporting_Manager__r.Official_Email__c,
-           PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c
+           PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c,
+           Department_Ref__c, Department_Ref__r.Name, Department_Ref__r.Code__c,
+           Designation_Ref__c, Designation_Ref__r.Name, Designation_Ref__r.Code__c,
+           Employment_Type__c, Probation_End_Date__c, Confirmation_Date__c, Resignation_Date__c, LWD__c
     FROM Employee__c
     WHERE Official_Email__c = '${email}'
     AND Employee_Status__c = 'Active'
@@ -149,7 +161,10 @@ export async function getEmployeeById(id: string): Promise<SFEmployee> {
            Department__c, Designation__c,
            Reporting_Manager__c, Reporting_Manager__r.Name, 
            Reporting_Manager__r.Id, Reporting_Manager__r.Official_Email__c,
-           PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c
+           PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c,
+           Department_Ref__c, Department_Ref__r.Name, Department_Ref__r.Code__c,
+           Designation_Ref__c, Designation_Ref__r.Name, Designation_Ref__r.Code__c,
+           Employment_Type__c, Probation_End_Date__c, Confirmation_Date__c, Resignation_Date__c, LWD__c
     FROM Employee__c
     WHERE Id = '${id}'
     LIMIT 1
@@ -162,8 +177,9 @@ export async function getEmployeeById(id: string): Promise<SFEmployee> {
 export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmployee[]> {
   return query<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
-           Official_Email__c, Photograph__c, Department__c,
-           Designation__c, Employee_Status__c, Role__c
+           Official_Email__c, Photograph__c, Department__c, Designation__c,
+           Department_Ref__c, Department_Ref__r.Name, Designation_Ref__c, Designation_Ref__r.Name,
+           Employee_Status__c, Role__c
     FROM Employee__c
     WHERE Reporting_Manager__c = '${managerEmployeeId}'
     AND Employee_Status__c = 'Active'
@@ -177,8 +193,9 @@ export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmplo
 export async function getAllEmployees(): Promise<SFEmployee[]> {
   return query<SFEmployee>(`
     SELECT Id, Name, Employee_Code__c, First_Name__c, Last_Name__c,
-           Official_Email__c, Photograph__c, Department__c,
-           Designation__c, Employee_Status__c, Role__c, DOB__c,
+           Official_Email__c, Photograph__c, Department__c, Designation__c,
+           Department_Ref__c, Department_Ref__r.Name, Designation_Ref__c, Designation_Ref__r.Name,
+           Employee_Status__c, Role__c, DOB__c,
            Date_of_Joining__c, Reporting_Manager__c, Reporting_Manager__r.Name
     FROM Employee__c
     WHERE Employee_Status__c = 'Active'

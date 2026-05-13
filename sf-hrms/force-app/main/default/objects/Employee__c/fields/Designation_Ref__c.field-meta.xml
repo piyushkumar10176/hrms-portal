@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Designation_Ref__c</fullName>
+    <label>Designation (Lookup)</label>
+    <type>Lookup</type>
+    <referenceTo>Designation__c</referenceTo>
+    <relationshipName>Employees</relationshipName>
+    <relationshipLabel>Employees</relationshipLabel>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <description>Structured designation lookup — replaces legacy text Designation__c field</description>
+    <inlineHelpText>Select the employee's job designation from the dropdown</inlineHelpText>
+</CustomField>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Resignation_Date__c</fullName>
+    <label>Resignation Date</label>
+    <type>Date</type>
+    <required>false</required>
+    <description>Date when the employee submitted their resignation</description>
+    <inlineHelpText>Date the employee officially resigned</inlineHelpText>
+</CustomField>

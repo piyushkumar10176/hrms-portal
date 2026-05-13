@@ -20,9 +20,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       lastName: sfEmp.Last_Name__c || sfEmp.Name?.split(" ")?.[1] || "",
       email: sfEmp.Official_Email__c,
       phone: sfEmp.Mobile__c || "",
-      department: sfEmp.Department__c || "",
-      designation: sfEmp.Designation__c || "",
+      department: sfEmp.Department_Ref__r?.Name || sfEmp.Department__c || "",
+      designation: sfEmp.Designation_Ref__r?.Name || sfEmp.Designation__c || "",
       dateOfJoining: sfEmp.Date_of_Joining__c || "",
+      employmentType: sfEmp.Employment_Type__c || "Full-Time",
+      probationEndDate: sfEmp.Probation_End_Date__c || "",
+      confirmationDate: sfEmp.Confirmation_Date__c || "",
+      resignationDate: sfEmp.Resignation_Date__c || "",
+      lwd: sfEmp.LWD__c || "",
       reportingManagerId: sfEmp.Reporting_Manager__c || null,
       status: sfEmp.Employee_Status__c,
       gender: sfEmp.Gender__c,
@@ -62,8 +67,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if (body.lastName !== undefined) allowedUpdates.Last_Name__c = body.lastName;
   if (body.phone !== undefined) allowedUpdates.Mobile__c = body.phone;
   if (body.department !== undefined) allowedUpdates.Department__c = body.department;
+  if (body.departmentId !== undefined) allowedUpdates.Department_Ref__c = body.departmentId || null;
   if (body.designation !== undefined) allowedUpdates.Designation__c = body.designation;
+  if (body.designationId !== undefined) allowedUpdates.Designation_Ref__c = body.designationId || null;
   if (body.dateOfJoining !== undefined) allowedUpdates.Date_of_Joining__c = body.dateOfJoining;
+  if (body.employmentType !== undefined) allowedUpdates.Employment_Type__c = body.employmentType;
+  if (body.probationEndDate !== undefined) allowedUpdates.Probation_End_Date__c = body.probationEndDate || null;
+  if (body.confirmationDate !== undefined) allowedUpdates.Confirmation_Date__c = body.confirmationDate || null;
+  if (body.resignationDate !== undefined) allowedUpdates.Resignation_Date__c = body.resignationDate || null;
+  if (body.lwd !== undefined) allowedUpdates.LWD__c = body.lwd || null;
   if (body.reportingManagerId !== undefined) allowedUpdates.Reporting_Manager__c = body.reportingManagerId;
   if (body.dateOfBirth !== undefined) allowedUpdates.DOB__c = body.dateOfBirth;
   if (body.gender !== undefined) allowedUpdates.Gender__c = body.gender;
@@ -88,9 +100,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       lastName: sfEmp.Last_Name__c || sfEmp.Name?.split(" ")?.[1] || "",
       email: sfEmp.Official_Email__c,
       phone: sfEmp.Mobile__c || "",
-      department: sfEmp.Department__c || "",
-      designation: sfEmp.Designation__c || "",
+      department: sfEmp.Department_Ref__r?.Name || sfEmp.Department__c || "",
+      designation: sfEmp.Designation_Ref__r?.Name || sfEmp.Designation__c || "",
       dateOfJoining: sfEmp.Date_of_Joining__c || "",
+      employmentType: sfEmp.Employment_Type__c || "Full-Time",
+      probationEndDate: sfEmp.Probation_End_Date__c || "",
+      confirmationDate: sfEmp.Confirmation_Date__c || "",
+      resignationDate: sfEmp.Resignation_Date__c || "",
+      lwd: sfEmp.LWD__c || "",
       reportingManagerId: sfEmp.Reporting_Manager__c || null,
       status: sfEmp.Employee_Status__c,
       gender: sfEmp.Gender__c,

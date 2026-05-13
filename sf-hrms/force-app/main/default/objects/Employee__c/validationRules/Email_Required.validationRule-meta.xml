@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Email_Required</fullName>
+    <active>true</active>
+    <errorConditionFormula>ISBLANK(Official_Email__c)</errorConditionFormula>
+    <errorDisplayField>Official_Email__c</errorDisplayField>
+    <errorMessage>Official email address is required for all employees.</errorMessage>
+    <description>Ensures every employee has an official email address</description>
+</ValidationRule>

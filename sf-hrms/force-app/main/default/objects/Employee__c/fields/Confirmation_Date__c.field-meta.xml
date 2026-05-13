@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Confirmation_Date__c</fullName>
+    <label>Confirmation Date</label>
+    <type>Date</type>
+    <required>false</required>
+    <description>Date when the employee was confirmed after probation</description>
+    <inlineHelpText>Date the employee was confirmed as a permanent member</inlineHelpText>
+</CustomField>

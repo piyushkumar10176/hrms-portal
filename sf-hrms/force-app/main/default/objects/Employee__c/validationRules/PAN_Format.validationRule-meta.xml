@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>PAN_Format</fullName>
+    <active>true</active>
+    <errorConditionFormula>AND(NOT(ISBLANK(PAN__c)), NOT(REGEX(PAN__c, "[A-Z]{5}[0-9]{4}[A-Z]")))</errorConditionFormula>
+    <errorDisplayField>PAN__c</errorDisplayField>
+    <errorMessage>PAN must be in valid Indian format (e.g. ABCDE1234F).</errorMessage>
+    <description>Validates Indian PAN card number format: 5 letters, 4 digits, 1 letter</description>
+</ValidationRule>

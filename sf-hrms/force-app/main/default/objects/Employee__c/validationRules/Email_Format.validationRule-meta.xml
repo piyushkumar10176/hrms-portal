@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Email_Format</fullName>
+    <active>true</active>
+    <errorConditionFormula>NOT(ISBLANK(Official_Email__c)) &amp;&amp; NOT(REGEX(Official_Email__c, "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"))</errorConditionFormula>
+    <errorDisplayField>Official_Email__c</errorDisplayField>
+    <errorMessage>Please enter a valid email address format (e.g. name@company.com).</errorMessage>
+    <description>Validates email format using regex pattern</description>
+</ValidationRule>

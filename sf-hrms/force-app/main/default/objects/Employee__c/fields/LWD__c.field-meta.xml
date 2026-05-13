@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LWD__c</fullName>
+    <label>Last Working Day</label>
+    <type>Date</type>
+    <required>false</required>
+    <description>Employee's last working day in the organization</description>
+    <inlineHelpText>The final working day — used for offboarding and FNF calculations</inlineHelpText>
+</CustomField>
