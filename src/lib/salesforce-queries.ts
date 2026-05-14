@@ -363,6 +363,40 @@ export async function getPendingApprovals(managerEmployeeId: string): Promise<SF
   `);
 }
 
+export async function getPendingRegularizationApprovals(managerEmployeeId: string) {
+  return query<any>(`
+    SELECT Id, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
+           Date__c, Requested_Clock_In__c, Requested_Clock_Out__c, Reason__c,
+           Status__c, CreatedDate
+    FROM Regularization_Request__c
+    WHERE Approver__c = '${managerEmployeeId}'
+    AND Status__c = 'Submitted'
+    ORDER BY CreatedDate ASC
+  `);
+}
+
+export async function getPendingExpenseApprovals(managerEmployeeId: string) {
+  return query<any>(`
+    SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
+           Title__c, Total_Amount__c, Notes__c, Status__c, CreatedDate
+    FROM Expense_Report__c
+    WHERE Approver__c = '${managerEmployeeId}'
+    AND Status__c = 'Submitted'
+    ORDER BY CreatedDate ASC
+  `);
+}
+
+export async function getPendingReimbursementApprovals(managerEmployeeId: string) {
+  return query<any>(`
+    SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
+           Component__r.Name, Amount_Claimed__c, Status__c, CreatedDate
+    FROM Reimbursement__c
+    WHERE Approver__c = '${managerEmployeeId}'
+    AND Status__c = 'Submitted'
+    ORDER BY CreatedDate ASC
+  `);
+}
+
 /**
  * Get team leave calendar (approved leaves for a manager's team).
  */

@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getPendingApprovals, createHistoryRecord } from "@/lib/salesforce-queries";
+import { 
+  getEmployeeByEmail, 
+  getPendingApprovals, 
+  getPendingRegularizationApprovals,
+  getPendingExpenseApprovals,
+  getPendingReimbursementApprovals,
+  createHistoryRecord 
+} from "@/lib/salesforce-queries";
 import { updateRecord, createRecord, getSalesforceConnection } from "@/lib/salesforce";
 
 export const dynamic = "force-dynamic";
@@ -12,22 +19,61 @@ export async function GET() {
   try {
     const sfEmp = await getEmployeeByEmail(session.user.email);
     
-    // Get pending approvals where this employee is the approver
-    const sfApprovals = await getPendingApprovals(sfEmp.Id);
+    // Fetch all pending approvals in parallel
+    const [leaveReqs, regReqs, expReqs, reimbReqs] = await Promise.all([
+      getPendingApprovals(sfEmp.Id).catch(() => []),
+      getPendingRegularizationApprovals(sfEmp.Id).catch(() => []),
+      getPendingExpenseApprovals(sfEmp.Id).catch(() => []),
+      getPendingReimbursementApprovals(sfEmp.Id).catch(() => [])
+    ]);
     
-    const approvals = sfApprovals.map(r => ({
+    // Map leaves
+    const leaves = leaveReqs.map((r: any) => ({
       id: r.Id,
+      type: "Leave",
       employeeId: r.Employee__c,
       employeeName: r.Employee__r?.Name || "Unknown",
-      employeeEmail: r.Employee__r?.Official_Email__c || "",
-      leaveType: r.Leave_Type__r?.Name || "Leave",
-      fromDate: r.From_Date__c,
-      toDate: r.To_Date__c,
-      days: r.Days__c,
+      details: `${r.Leave_Type__r?.Name || "Leave"} • ${r.Days__c} day(s) from ${r.From_Date__c} to ${r.To_Date__c}`,
       reason: r.Reason__c || "",
-      status: r.Status__c,
       appliedOn: r.CreatedDate || new Date().toISOString()
     }));
+
+    // Map regularizations
+    const regularizations = regReqs.map((r: any) => ({
+      id: r.Id,
+      type: "Regularization",
+      employeeId: r.Employee__c,
+      employeeName: r.Employee__r?.Name || "Unknown",
+      details: `Date: ${r.Date__c} • In: ${r.Requested_Clock_In__c || "-"} • Out: ${r.Requested_Clock_Out__c || "-"}`,
+      reason: r.Reason__c || "",
+      appliedOn: r.CreatedDate || new Date().toISOString()
+    }));
+
+    // Map expenses
+    const expenses = expReqs.map((r: any) => ({
+      id: r.Id,
+      type: "Expense",
+      employeeId: r.Employee__c,
+      employeeName: r.Employee__r?.Name || "Unknown",
+      details: `Title: ${r.Title__c} • Total: ₹${r.Total_Amount__c || 0}`,
+      reason: r.Notes__c || "",
+      appliedOn: r.CreatedDate || new Date().toISOString()
+    }));
+
+    // Map reimbursements
+    const reimbursements = reimbReqs.map((r: any) => ({
+      id: r.Id,
+      type: "Reimbursement",
+      employeeId: r.Employee__c,
+      employeeName: r.Employee__r?.Name || "Unknown",
+      details: `Component: ${r.Component__r?.Name || "Other"} • Amount: ₹${r.Amount_Claimed__c || 0}`,
+      reason: "",
+      appliedOn: r.CreatedDate || new Date().toISOString()
+    }));
+
+    const approvals = [...leaves, ...regularizations, ...expenses, ...reimbursements].sort((a, b) => 
+      new Date(a.appliedOn).getTime() - new Date(b.appliedOn).getTime()
+    );
     
     return NextResponse.json({ approvals, source: "salesforce" });
   } catch (err) {
@@ -40,75 +86,78 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { requestId, action } = await req.json();
-  if (!requestId || !["approve", "reject"].includes(action)) {
-    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const { requestId, action, type, employeeId } = await req.json();
+  if (!requestId || !["approve", "reject"].includes(action) || !type || !employeeId) {
+    return NextResponse.json({ error: "Invalid request parameters" }, { status: 400 });
   }
 
   try {
-    const conn = await getSalesforceConnection();
     const manager = await getEmployeeByEmail(session.user.email);
+    const newStatus = action === "approve" ? "Approved" : "Rejected";
     
-    // Fetch the leave request with full details
-    const lrResult = await conn.query(`
-      SELECT Id, Employee__c, Employee__r.Name, Leave_Type__c, Leave_Type__r.Name,
-             Days__c, From_Date__c, To_Date__c, Status__c, Reason__c
-      FROM Leave_Request__c WHERE Id = '${requestId}' LIMIT 1
-    `);
-    if (lrResult.totalSize === 0) {
-       return NextResponse.json({ error: "Leave request not found" }, { status: 404 });
+    let objectName = "";
+    let actionDesc = "";
+    let employeeId = "";
+
+    if (type === "Leave") {
+      objectName = "Leave_Request__c";
+      actionDesc = "Leave Request";
+    } else if (type === "Regularization") {
+      objectName = "Regularization_Request__c";
+      actionDesc = "Attendance Regularization";
+    } else if (type === "Expense") {
+      objectName = "Expense_Report__c";
+      actionDesc = "Expense Report";
+    } else if (type === "Reimbursement") {
+      objectName = "Reimbursement__c";
+      actionDesc = "Reimbursement Claim";
+    } else {
+      return NextResponse.json({ error: "Invalid approval type" }, { status: 400 });
     }
 
-    const lr = lrResult.records[0] as any;
-    
-    // Update Leave Request status and set Approver
-    const newStatus = action === "approve" ? "Approved" : "Rejected";
-    await updateRecord("Leave_Request__c", requestId, {
+    // Since we just need to update the status and approver, we can do it generically
+    await updateRecord(objectName, requestId, {
       Status__c: newStatus,
       Approver__c: manager.Id,
     });
-    
-    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-    const leaveTypeName = lr.Leave_Type__r?.Name || "Leave";
-    const employeeName = lr.Employee__r?.Name || "Employee";
-    const days = lr.Days__c || 0;
-
-    // Create history record for the employee
-    await createHistoryRecord({
-      employeeId: lr.Employee__c,
-      date: today,
-      type: action === "approve" ? "Leave Approved" : "Leave Rejected",
-      description: `${days} day(s) of ${leaveTypeName} ${action === "approve" ? "approved" : "rejected"} by ${manager.Name || "Manager"}.`
-    });
 
     // Create history record for the manager
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     await createHistoryRecord({
       employeeId: manager.Id,
       date: today,
-      type: action === "approve" ? "Approved Leave" : "Rejected Leave",
-      description: `${action === "approve" ? "Approved" : "Rejected"} ${days} day(s) of ${leaveTypeName} for ${employeeName}.`
+      type: `${action === "approve" ? "Approved" : "Rejected"} ${type}`,
+      description: `${action === "approve" ? "Approved" : "Rejected"} a ${actionDesc}.`
+    });
+
+    // Create history record for the employee
+    await createHistoryRecord({
+      employeeId: employeeId,
+      date: today,
+      type: `${type} ${newStatus}`,
+      description: `Your ${actionDesc} was ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`
     });
 
     // Create in-app notification for the employee
     try {
       await createRecord("Notification__c", {
-        Employee__c: lr.Employee__c,
-        Message__c: `Your ${leaveTypeName} request for ${days} day(s) has been ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`,
-        Type__c: "Leave",
+        Employee__c: employeeId,
+        Message__c: `Your ${actionDesc} has been ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`,
+        Type__c: type,
         Is_Read__c: false,
         Related_Record_Id__c: requestId,
       });
     } catch (notifErr) {
       console.warn("Notification creation failed (non-fatal):", notifErr);
     }
-    
+
     return NextResponse.json({ 
       request: { id: requestId, status: newStatus }, 
-      message: `Leave ${action}d successfully` 
+      message: `${type} ${action}d successfully` 
     });
 
   } catch (err) {
     console.error("Salesforce approval update error:", err);
-    return NextResponse.json({ error: "Failed to update leave request" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to process approval" }, { status: 500 });
   }
 }
