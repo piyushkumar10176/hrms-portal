@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="UTF-8"?><CustomField xmlns="http://soap.sforce.com/2006/04/metadata"><fullName>Payroll_Cycle__c</fullName><label>Payroll Cycle</label><type>Lookup</type><referenceTo>Payroll_Cycle__c</referenceTo><relationshipLabel>Loan Repayments</relationshipLabel><relationshipName>Loan_Repayments</relationshipName></CustomField>

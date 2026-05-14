@@ -17,7 +17,9 @@ import {
   ChevronRight,
   ChevronLeft,
   CheckSquare,
-  Settings
+  Settings,
+  Receipt,
+  Package
 } from "lucide-react";
 import { useSession } from "next-auth/react";
 
@@ -31,6 +33,7 @@ const baseNavigation = [
       { name: "Attendance", href: "/attendance" },
       { name: "Leave", href: "/leave" },
       { name: "Regularization", href: "/regularization" },
+      { name: "Expenses", href: "/expenses" },
       { name: "Performance", href: "/profile" },
       { name: "Documents", href: "/profile/documents" },
     ]
@@ -45,9 +48,11 @@ const baseNavigation = [
       { name: "Payslips", href: "/payroll" },
       { name: "Salary Structure", href: "/payroll?tab=structure" },
       { name: "Tax Declarations", href: "/payroll?tab=tax" },
+      { name: "Loans", href: "/loans" },
     ]
   },
   { name: "Org", href: "/organisation", icon: Building2 },
+  { name: "Assets", href: "/assets", icon: Package },
 ];
 
 export function Sidebar() {
@@ -69,6 +74,7 @@ export function Sidebar() {
         { name: "Departments", href: "/admin/departments" },
         { name: "Designations", href: "/admin/designations" },
         { name: "Onboarding", href: "/admin/onboarding" },
+        { name: "Assets", href: "/admin/assets" },
       ]
     }] : [])
   ];
