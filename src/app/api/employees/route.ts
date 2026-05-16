@@ -78,13 +78,15 @@ export async function POST(req: NextRequest) {
     const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
     const inviteLink = `${baseUrl}/setup-password/${token}`;
 
-    console.log(`\n============================`);
-    console.log(`📧 INVITE SENT TO: ${body.email}`);
-    console.log(`Subject: Welcome to HRMS! Please setup your account`);
-    console.log(`Body: Click here to set your password and log in: ${inviteLink}`);
-    console.log(`Salesforce Record ID: ${sfId}`);
-    console.log(`Token expires: ${expiresAt}`);
-    console.log(`============================\n`);
+    if (process.env.NODE_ENV !== "production") {
+      console.log(`\n============================`);
+      console.log(`📧 INVITE SENT TO: ${body.email}`);
+      console.log(`Subject: Welcome to HRMS! Please setup your account`);
+      console.log(`Body: Click here to set your password and log in: ${inviteLink}`);
+      console.log(`Salesforce Record ID: ${sfId}`);
+      console.log(`Token expires: ${expiresAt}`);
+      console.log(`============================\n`);
+    }
 
     return NextResponse.json({ 
       employee: { id: sfId, firstName: body.firstName, lastName: body.lastName, email: body.email },

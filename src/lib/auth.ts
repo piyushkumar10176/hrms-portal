@@ -8,7 +8,7 @@
 
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { compareSync } from "bcryptjs";
+import { compare } from "bcryptjs";
 import { queryOneOrNull } from "./salesforce";
 import { authConfig } from "./auth.config";
 
@@ -57,6 +57,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!email || !password) return null;
 
         try {
+          // Strict email regex to prevent SOQL injection
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(email)) return null;
+
           const emp = await queryOneOrNull<{
             Id: string;
             Official_Email__c: string;
@@ -79,7 +83,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           `);
 
           if (!emp || !emp.Password_Hash__c) return null;
-          if (!compareSync(password, emp.Password_Hash__c)) return null;
+          const isValid = await compare(password, emp.Password_Hash__c);
+          if (!isValid) return null;
 
           return {
             id: emp.Id,

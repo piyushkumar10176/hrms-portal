@@ -34,12 +34,11 @@ const baseNavigation = [
       { name: "Leave", href: "/leave" },
       { name: "Regularization", href: "/regularization" },
       { name: "Expenses", href: "/expenses" },
-      { name: "Performance", href: "/profile" },
+      { name: "Profile", href: "/profile" },
       { name: "Documents", href: "/profile/documents" },
     ]
   },
   { name: "Inbox", href: "/approvals", icon: Inbox },
-  { name: "My Team", href: "/team", icon: Users },
   { 
     name: "My Finances", 
     href: "#", 
@@ -94,7 +93,10 @@ export function Sidebar() {
       {/* Main Navigation */}
       <nav className="flex-1 py-4 flex flex-col gap-2 items-center overflow-y-auto">
         {navigation.map((item) => {
-          const isActive = pathname === item.href || (item.subMenu && item.subMenu.some(sub => pathname.startsWith(sub.href)));
+          const isActive = pathname === item.href || 
+            (item.subMenu && item.subMenu.some(sub => 
+              sub.href.includes('?') ? pathname === sub.href.split('?')[0] : pathname === sub.href
+            ));
           
           return (
             <div 

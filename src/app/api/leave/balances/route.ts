@@ -23,14 +23,6 @@ export async function GET() {
       color: colors[i % colors.length]
     }));
     
-    // Provide some default balances if empty so UI looks good
-    if (balances.length === 0) {
-      return NextResponse.json({ balances: [
-        { leaveType: "Annual Leave", code: "AL", total: 20, used: 0, available: 20, color: "#4F46E5" },
-        { leaveType: "Sick Leave", code: "SL", total: 10, used: 0, available: 10, color: "#10B981" },
-        { leaveType: "Casual Leave", code: "CL", total: 5, used: 0, available: 5, color: "#F59E0B" }
-      ], source: "salesforce-default" });
-    }
     
     return NextResponse.json({ balances, source: "salesforce" });
   } catch (err) {

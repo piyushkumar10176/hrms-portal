@@ -24,13 +24,24 @@ export async function GET() {
 
 export async function POST(req: Request) {
   const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!session?.user?.id || session.user.role !== "admin") {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
 
   try {
     const body = await req.json();
+    
+    // Calculate End_Date__c based on Start_Date__c and Tenure_Months__c
+    let endDate = null;
+    if (body.startDate && body.tenureMonths) {
+      const start = new Date(body.startDate);
+      start.setMonth(start.getMonth() + parseInt(body.tenureMonths, 10));
+      endDate = start.toISOString().split("T")[0];
+    }
+
     const id = await createRecord("Loan__c", {
       Name: body.name || `Loan - ${body.type}`,
-      Employee__c: session.user.id,
+      Employee__c: body.employeeId || session.user.id, // Allow admin to create for someone else
       Type__c: body.type,
       Principal__c: body.principal,
       Interest_Rate__c: body.interestRate || 0,
@@ -38,6 +49,7 @@ export async function POST(req: Request) {
       EMI__c: body.emi,
       Outstanding__c: body.principal,
       Start_Date__c: body.startDate,
+      End_Date__c: endDate,
       Status__c: "Active",
     });
     return NextResponse.json({ id, message: "Loan created" }, { status: 201 });

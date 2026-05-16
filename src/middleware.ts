@@ -21,6 +21,7 @@ export default middleware((req) => {
 
   // Admin-only routes
   const isAdminRoute = pathname.startsWith("/admin") || 
+    pathname.startsWith("/api/admin") ||
     pathname.startsWith("/api/employees") ||
     pathname.startsWith("/api/salary");
   

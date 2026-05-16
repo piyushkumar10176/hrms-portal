@@ -14,7 +14,7 @@ export async function GET() {
     
     const requests = sfRequests.map(r => ({
       id: r.Id,
-      leaveType: r.Leave_Type__r?.Name || "Annual Leave",
+      leaveType: r.Leave_Type__r?.Name || "Unknown",
       fromDate: r.From_Date__c,
       toDate: r.To_Date__c,
       days: r.Days__c,
@@ -44,10 +44,10 @@ export async function POST(req: NextRequest) {
   try {
     const sfEmp = await getEmployeeByEmail(session.user.email);
     const sfLeaveTypes = await getLeaveTypes();
-    const sfType = sfLeaveTypes.find(t => t.Name === leaveType) || sfLeaveTypes[0];
+    const sfType = sfLeaveTypes.find(t => t.Name === leaveType);
     
     if (!sfType) {
-      return NextResponse.json({ error: "Invalid leave type" }, { status: 400 });
+      return NextResponse.json({ error: `Invalid leave type: ${leaveType}` }, { status: 400 });
     }
 
     await createLeaveRequest({

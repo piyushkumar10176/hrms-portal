@@ -19,6 +19,7 @@ import jsforce, { Connection } from "jsforce";
 
 let sfConnection: Connection | null = null;
 let connectionExpiry: number = 0;
+let pendingConnection: Promise<Connection> | null = null;
 
 /**
  * Get an authenticated Salesforce connection.
@@ -32,6 +33,21 @@ export async function getSalesforceConnection(): Promise<Connection> {
   if (sfConnection && Date.now() < connectionExpiry - 300000) {
     return sfConnection;
   }
+
+  // If a connection attempt is already in progress, wait for it
+  if (pendingConnection) {
+    return pendingConnection;
+  }
+
+  // Create a new pending connection promise
+  pendingConnection = doConnect().finally(() => {
+    pendingConnection = null;
+  });
+
+  return pendingConnection;
+}
+
+async function doConnect(): Promise<Connection> {
 
   const loginUrl = process.env.SF_LOGIN_URL || "https://login.salesforce.com";
   const clientId = process.env.SF_CLIENT_ID;

@@ -11,7 +11,7 @@ export async function GET() {
     const punches = await getTodayPunches(sfEmp.Id);
     
     // Check for the most recent punches today
-    const clockInPunch = punches.find(p => p.Punch_Type__c === "Check-In");
+    const clockInPunch = [...punches].reverse().find(p => p.Punch_Type__c === "Check-In");
     const clockOutPunch = [...punches].reverse().find(p => p.Punch_Type__c === "Check-Out");
     
     if (clockInPunch) {

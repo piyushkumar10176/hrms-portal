@@ -72,7 +72,7 @@ export async function GET() {
     }));
 
     const approvals = [...leaves, ...regularizations, ...expenses, ...reimbursements].sort((a, b) => 
-      new Date(a.appliedOn).getTime() - new Date(b.appliedOn).getTime()
+      new Date(b.appliedOn).getTime() - new Date(a.appliedOn).getTime()
     );
     
     return NextResponse.json({ approvals, source: "salesforce" });
@@ -97,7 +97,6 @@ export async function POST(req: NextRequest) {
     
     let objectName = "";
     let actionDesc = "";
-    let employeeId = "";
 
     if (type === "Leave") {
       objectName = "Leave_Request__c";
