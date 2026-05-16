@@ -40,6 +40,10 @@ export default function AdminEmployeesPage() {
 
   const fetchEmployees = () => {
     fetch("/api/employees").then(r => r.json()).then(d => {
+      if (d.error) {
+        setMsg({ text: `Connection Error: ${d.error} - Salesforce may be temporarily unavailable.`, type: "error" });
+        return;
+      }
       let emps = d.employees || [];
       if (!isAdmin) {
         // If not admin, only show direct reports (or self if no direct reports, though usually just direct reports)
