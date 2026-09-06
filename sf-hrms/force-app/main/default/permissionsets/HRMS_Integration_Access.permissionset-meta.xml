@@ -1033,6 +1033,10 @@
         <apexClass>LeaveSlackNotifier</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <externalCredentialPrincipalAccesses>
+        <enabled>true</enabled>
+        <externalCredentialPrincipal>Slack_API-SlackBotPrincipal</externalCredentialPrincipal>
+    </externalCredentialPrincipalAccesses>
     <userPermissions>
         <enabled>true</enabled>
         <name>ApiEnabled</name>

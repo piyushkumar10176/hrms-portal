@@ -101,7 +101,10 @@ public with sharing class LeaveSlackNotifier implements Queueable, Database.Allo
 
             for (String target : targets) {
                 SlackService.SendResult result =
-                    SlackService.postMessage(setting.Named_Credential__c, target, fallback, blocks);
+                    SlackService.postMessage(
+                        setting.Named_Credential__c, target, fallback, blocks,
+                        setting.Workspace_Team_Id__c
+                    );
                 if (!result.success) {
                     System.debug(
                         LoggingLevel.ERROR,

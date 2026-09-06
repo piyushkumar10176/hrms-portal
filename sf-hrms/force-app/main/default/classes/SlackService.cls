@@ -42,6 +42,19 @@ public with sharing class SlackService {
         String fallbackText,
         String blocksJson
     ) {
+        return postMessage(namedCredential, channel, fallbackText, blocksJson, null);
+    }
+
+    /**
+     * @param teamId workspace id inside an Enterprise Grid org, or null
+     */
+    public static SendResult postMessage(
+        String namedCredential,
+        String channel,
+        String fallbackText,
+        String blocksJson,
+        String teamId
+    ) {
         if (String.isBlank(namedCredential) || String.isBlank(channel)) {
             return new SendResult(false, channel, 'missing_configuration');
         }
@@ -52,6 +65,11 @@ public with sharing class SlackService {
         };
         if (String.isNotBlank(blocksJson)) {
             payload.put('blocks', (List<Object>) JSON.deserializeUntyped(blocksJson));
+        }
+        // An org-wide install spans every workspace in the Grid, so Slack refuses
+        // channel-scoped calls with team_access_not_granted unless told which one.
+        if (String.isNotBlank(teamId)) {
+            payload.put('team_id', teamId);
         }
 
         HttpRequest request = new HttpRequest();

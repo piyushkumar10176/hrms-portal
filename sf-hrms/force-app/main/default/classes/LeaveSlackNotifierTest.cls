@@ -11,7 +11,17 @@ private class LeaveSlackNotifierTest {
         TestDataFactory.createLeaveBalances(employees, leaveType, 0, 12, true);
     }
 
+    /** A settings record with the integration switched off. */
+    private static HRMS_Slack_Setting__mdt disabledSetting() {
+        return new HRMS_Slack_Setting__mdt(Enabled__c = false);
+    }
+
     private static Leave_Request__c createRequest() {
+        // Pin the setting off while seeding, so the trigger does not enqueue a
+        // real notification and inflate the callout counts these tests assert on.
+        // Without this the tests pass or fail depending on whether the Default
+        // metadata record happens to be enabled in the org.
+        LeaveSlackNotifier.settingOverride = disabledSetting();
         List<Employee__c> employees = [SELECT Id FROM Employee__c ORDER BY Employee_Code__c];
         Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
         Leave_Request__c request = TestDataFactory.buildLeaveRequest(
@@ -28,9 +38,12 @@ private class LeaveSlackNotifierTest {
 
     @isTest
     static void shouldNotEnqueue_WhenIntegrationDisabled() {
-        // Given the shipped Default record has Enabled__c = false
+        // Given the integration is switched off
+        Leave_Request__c request = createRequest();
+        LeaveSlackNotifier.settingOverride = disabledSetting();
+
         Test.startTest();
-        LeaveSlackNotifier.enqueue(new Set<Id>{ createRequest().Id }, true);
+        LeaveSlackNotifier.enqueue(new Set<Id>{ request.Id }, true);
         Integer queued = Limits.getQueueableJobs();
         Test.stopTest();
 
@@ -39,6 +52,7 @@ private class LeaveSlackNotifierTest {
 
     @isTest
     static void shouldIgnoreEmptyInput() {
+        LeaveSlackNotifier.settingOverride = disabledSetting();
         Test.startTest();
         LeaveSlackNotifier.enqueue(new Set<Id>(), true);
         LeaveSlackNotifier.enqueue(null, true);
@@ -51,6 +65,7 @@ private class LeaveSlackNotifierTest {
     @isTest
     static void shouldBuildValidBlockKitForNewRequest() {
         Leave_Request__c request = createRequest();
+        LeaveSlackNotifier.settingOverride = disabledSetting();
 
         Test.startTest();
         String blocksJson = LeaveSlackNotifier.buildBlocks(request, true);
@@ -72,6 +87,7 @@ private class LeaveSlackNotifierTest {
     @isTest
     static void shouldBuildDecisionMessage_WhenNotNew() {
         Leave_Request__c request = createRequest();
+        LeaveSlackNotifier.settingOverride = disabledSetting();
         request.Status__c = 'Approved';
 
         Test.startTest();
@@ -86,6 +102,7 @@ private class LeaveSlackNotifierTest {
     @isTest
     static void shouldNameEmployeeAndDatesInFallback() {
         Leave_Request__c request = createRequest();
+        LeaveSlackNotifier.settingOverride = disabledSetting();
 
         Test.startTest();
         String fallback = LeaveSlackNotifier.buildFallback(request, true);

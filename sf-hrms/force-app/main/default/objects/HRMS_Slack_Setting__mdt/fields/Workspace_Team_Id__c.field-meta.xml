@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Workspace_Team_Id__c</fullName>
+    <label>Workspace Team Id</label>
+    <type>Text</type>
+    <length>32</length>
+    <description>Workspace id (T...) inside an Enterprise Grid org. An org-installed app holds a token spanning the whole org, so Slack needs to be told which workspace a channel or direct message belongs to. Sent as team_id. Leave blank for a single-workspace install.</description>
+</CustomField>
