@@ -12,4 +12,11 @@ trigger AttendancePunchTrigger on Attendance_Punch__c (
         affected.addAll(Trigger.old);
     }
     AttendanceRollupService.rebuild(affected);
+
+    // Only a genuinely new punch is announced. A correction or an undelete is
+    // housekeeping and would otherwise message the employee about a clock-in
+    // they made hours ago.
+    if (Trigger.isInsert) {
+        AttendancePunchSlackNotifier.enqueue(Trigger.new);
+    }
 }

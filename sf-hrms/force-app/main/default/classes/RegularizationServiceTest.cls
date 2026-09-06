@@ -132,7 +132,8 @@ private class RegularizationServiceTest {
 
     @isTest
     static void shouldPenaliseShortShift() {
-        // On time, but only seven hours worked against a nine hour policy.
+        // On time, but only seven effective hours worked against the eight the
+        // nine-hour shift contains once its one-hour break is taken out.
         Employee__c employee = firstEmployee();
         List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
             TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 9, 30), 'Check-In'),
@@ -148,7 +149,8 @@ private class RegularizationServiceTest {
             WHERE Employee__c = :employee.Id AND Date__c = :WORKDAY
         ];
         Assert.isTrue(row.Penalty__c, 'Leaving before a full shift is penalised');
-        Assert.isTrue(row.Penalty_Reason__c.contains('of 9 hours'), 'The reason names the shortfall');
+        Assert.isTrue(row.Penalty_Reason__c.contains('of 8 effective hours'),
+            'The reason names the shortfall, was: ' + row.Penalty_Reason__c);
     }
 
     @isTest

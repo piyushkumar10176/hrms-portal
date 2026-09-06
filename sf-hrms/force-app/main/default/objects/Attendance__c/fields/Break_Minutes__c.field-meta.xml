@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Break_Minutes__c</fullName>
+    <label>Break (Minutes)</label>
+    <description>Total unpaid break taken during the day: the sum of every gap between a check-out and the next check-in. Derived by AttendanceRollupService; do not edit by hand.</description>
+    <inlineHelpText>Sum of the gaps between each clock-out and the next clock-in on this day.</inlineHelpText>
+    <type>Number</type>
+    <precision>5</precision>
+    <scale>0</scale>
+    <defaultValue>0</defaultValue>
+</CustomField>

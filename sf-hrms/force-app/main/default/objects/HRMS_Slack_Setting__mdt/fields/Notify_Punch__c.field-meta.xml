@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Notify_Punch__c</fullName>
+    <label>Notify On Punch</label>
+    <type>Checkbox</type>
+    <defaultValue>true</defaultValue>
+    <description>Direct message the employee when a clock-in or clock-out is recorded from the web portal or a biometric device. Punches made through the Slack command are never announced this way, because the command already confirms them.</description>
+</CustomField>

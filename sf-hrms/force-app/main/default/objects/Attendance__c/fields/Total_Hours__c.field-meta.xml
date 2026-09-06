@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Total_Hours__c</fullName>
-    <label>Total Hours</label>
+    <label>Effective Hours</label>
+    <description>Hours actually worked: the sum of each clock-in to clock-out stretch, breaks excluded. This is the figure the attendance policy measures against HRMS_Penalty_Minimum_Hours. Derived by AttendanceRollupService; do not edit by hand.</description>
+    <inlineHelpText>Hours worked with breaks excluded.</inlineHelpText>
     <type>Number</type>
     <precision>5</precision>
     <scale>2</scale>

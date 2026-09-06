@@ -344,11 +344,45 @@ Everything else about attendance is derived from punches, never entered.
 
 ### The three ways a punch arrives
 
-| Source | Route | Status |
-|---|---|---|
-| Slack | `/attendance in` or `out` | Live |
-| Web portal | Clock page | Live |
-| Biometric device | Webhook or scheduled poll | Not yet connected |
+| Source | Route | Confirms to the employee | Status |
+|---|---|---|---|
+| Slack | `/attendance in` or `out` | The command's own reply | Live |
+| Web portal | Clock page | Slack direct message | Live |
+| Biometric device | `POST /api/webhook/biometric/punch` | Slack direct message | Endpoint live, no device pointed at it |
+
+Every source writes the same `Attendance_Punch__c` record, so the trigger, the
+rollup and the Slack notice all behave identically whichever way the punch came
+in. A Slack-sourced punch is the one exception to the direct message: the slash
+command has already answered the person who typed it, and a direct message on
+top would say the same thing twice.
+
+### The biometric endpoint
+
+`POST /api/webhook/biometric/punch`, authenticated by an `x-webhook-secret`
+header compared in constant time. It returns 503 until `BIOMETRIC_WEBHOOK_SECRET`
+is set, so an unconfigured deployment cannot be used to write attendance.
+
+```json
+{ "deviceId": "GATE-01",
+  "punches": [ { "employeeCode": "EMP007",
+                 "timestamp": "2026-09-06T10:00:00+05:30",
+                 "punchType": "IN" } ] }
+```
+
+- Up to 200 punches per request; a single punch may also be posted bare.
+- `punchType` accepts `IN`/`OUT`, `0`/`1`, and the spelled-out forms.
+- Each punch gets an `External_Punch_ID__c` of `device:employee:timestamp`, which
+  is unique in Salesforce. A terminal replaying its buffer after losing the
+  uplink therefore records nothing twice, which matters because a duplicated
+  punch would invent break time nobody took.
+- Timestamps more than 90 days old, or in the future, are refused: a terminal
+  with a wrong clock would otherwise corrupt months of attendance quietly.
+- Unusable punches are reported per punch, by index and reason, and the usable
+  ones in the same batch are still recorded.
+
+Terminals differ. When the make and model are settled, either point the device at
+a small adapter or extend `normalisePunch()` in the route; nothing downstream
+changes.
 
 ### Sequence rules
 
@@ -373,22 +407,65 @@ whole day:
    file evening punches on the wrong day.
 2. **First check-in, last check-out.** Multiple pairs in a day collapse to the
    outer span, so a lunch break does not split the day in two.
-3. **Hours** are the span between them, to two decimals. No check-out yet means
-   hours stay empty rather than being guessed.
-4. **Lateness** is arrival minus shift start minus grace, floored at zero.
-5. **Status** is Week Off on Saturday and Sunday, Holiday if the date is in
-   `Holiday__c`, otherwise Present, Half Day or Absent by hours worked.
-6. **Penalty** is derived last, from the rules below.
+3. **Break** is the sum of every gap between a check-out and the next check-in.
+   See below.
+4. **Effective hours** (`Total_Hours__c`) are the sum of each check-in to
+   check-out stretch, to two decimals. No completed stretch yet means hours stay
+   empty rather than being guessed.
+5. **Gross hours** (`Gross_Hours__c`) are the elapsed time from the first
+   check-in to the last punch, break included.
+6. **Lateness** is arrival minus shift start minus grace, floored at zero.
+7. **Status** is Week Off on Saturday and Sunday, Holiday if the date is in
+   `Holiday__c`, otherwise Present, Half Day or Absent by effective hours.
+8. **Penalty** is derived last, from the rules below.
+
+### Break time
+
+The shift runs 10:00 to 19:00: nine hours, of which **eight are effective and one
+is break**. Break is not declared by the employee and there is no separate break
+button. It is simply the gap between punches:
+
+> **A break is the time between a clock-out and the next clock-in on the same
+> business day.**
+
+Clock in at 10:00, out at 10:30, back in at 11:15, and that is 45 minutes of
+break. It makes no difference whether the hour is taken in one stretch or in
+several short ones; the gaps add up either way.
+
+| Punches | Break | Effective | Gross |
+|---|---|---|---|
+| in 10:00, out 19:00 | 0m | 9h | 9h |
+| in 10:00, out 13:00, in 14:00, out 19:00 | 1h | 8h | 9h |
+| in 10:00, out 10:30, in 11:15, out 16:00, in 16:15, out 19:00 | 1h | 8h | 9h |
+| in 10:00, out 13:00, in 15:00, out 19:00 | 2h | 7h | 9h |
+| in 10:00, out 10:30, in 11:15 *(still working)* | 45m | 30m | 1h 15m |
+
+Effective hours are summed from the worked stretches rather than subtracted from
+the span. The two agree on a finished day but not part way through one: the last
+row above has a break longer than the distance between the first check-in and the
+last check-out, and subtracting would report a negative day.
+
+Two kinds of bad data are handled rather than trusted. A stray check-out before
+the day's first check-in does not open a break that swallows the morning, and a
+device firing the same punch twice neither shortens a break nor loses worked
+time. Punches are sorted by time on read, so a batch import arriving out of order
+still derives correctly.
 
 ### The penalty rules
 
 | Breach | Threshold | Message |
 |---|---|---|
 | Late arrival | at or after 11:00 | `arrived at 11:45, at or after 11:00` |
-| Short shift | under 9 hours | `worked 6.50 of 9 hours` |
+| Short day | under 8 **effective** hours | `worked 7.00 of 8 effective hours (2h break, over the 1h allowance)` |
 
 Both thresholds are Custom Labels and change in Setup without a deploy. A day
 can breach both, and the reason then names both.
+
+The hours test reads effective hours, so a long lunch shortens the day exactly as
+leaving early does. Overrunning the one-hour break allowance is **named inside
+the reason but is not a breach on its own**: someone who breaks for ninety
+minutes and stays ninety minutes later has still done the work. The break is
+always visible on the record either way.
 
 **Never penalised**: weekends, public holidays, and any day still open because
 there is no check-out yet.
@@ -398,13 +475,31 @@ a punch and the penalty clears itself.
 
 Worked examples from real data:
 
-| Day | Arrived | Hours | Outcome |
-|---|---|---|---|
-| Wed 2 Sep | 11:45 | 9.25 | Late only |
-| Thu 3 Sep | 09:30 | 6.50 | Short shift only |
-| Wed 2 Sep (other person) | 12:10 | 4.83 | Both reasons |
-| Fri 4 Sep | 09:25 | 9.42 | No penalty |
-| Sun 6 Sep | 13:02 | 1.41 | Week off, exempt |
+| Day | Arrived | Break | Effective | Outcome |
+|---|---|---|---|---|
+| Wed 2 Sep | 11:45 | 0m | 9.25 | Late only |
+| Thu 3 Sep | 09:30 | 0m | 6.50 | Short day only |
+| Wed 2 Sep (other person) | 12:10 | 0m | 4.83 | Both reasons |
+| Fri 4 Sep | 09:25 | 0m | 9.42 | No penalty |
+| Sun 6 Sep | 13:02 | 0m | 1.41 | Week off, exempt |
+
+### What the employee sees
+
+**On every punch** made from the web portal or a biometric device, a Slack direct
+message: the time, the day's first clock-in and last clock-out, break so far
+against the one-hour allowance, and effective hours against the eight required.
+A clock-out that breached the policy also carries the reason.
+
+**`/attendance today`** in Slack lists every punch of the day in order, with the
+break that preceded each return, then the totals underneath.
+
+**The clock page** shows the same log, with each break called out between the
+punches that bound it, and three tiles: effective, break and time on premises.
+The clock-in button reads *Back from Break* while a break is open.
+
+**The attendance page** carries Break, Effective and On Premises columns per day,
+a month total for break, and an average effective day. A flagged day shows a
+warning marker whose tooltip is the reason.
 
 ---
 
@@ -640,9 +735,10 @@ is enforced when the request is made instead.
 |---|---|---|
 | `HRMS_Business_Time_Zone` | Asia/Kolkata | Time zone for all date bucketing |
 | `HRMS_Penalty_Arrival_Time` | 11:00 | Arrival at or after this is a penalty |
-| `HRMS_Penalty_Minimum_Hours` | 9 | Working less than this is a penalty |
-| `HRMS_Default_Full_Day_Hours` | 9 | Hours that count as a full day |
-| `HRMS_Default_Half_Day_Hours` | 4 | Hours that count as a half day |
+| `HRMS_Penalty_Minimum_Hours` | 8 | Effective hours below this is a penalty |
+| `HRMS_Break_Allowance_Minutes` | 60 | Break the shift allows before it is called out |
+| `HRMS_Default_Full_Day_Hours` | 8 | Effective hours that count as a full day |
+| `HRMS_Default_Half_Day_Hours` | 4 | Effective hours that count as a half day |
 | `HRMS_Default_Shift_Start` | 10:00 | Shift start when no shift is assigned |
 | `HRMS_Default_Shift_End` | 19:00 | Shift end, used to describe half-day sessions |
 | `HRMS_Default_Grace_Minutes` | 15 | Grace before lateness counts |
@@ -653,6 +749,7 @@ is enforced when the request is made instead.
 | Field | Value | Meaning |
 |---|---|---|
 | `Enabled__c` | true | Master switch for all Slack sending |
+| `Notify_Punch__c` | true | Direct message the employee on a web or biometric punch |
 | `Named_Credential__c` | Slack_API | Where the bot token lives |
 | `Workspace_Team_Id__c` | T0BV8DT6LKG | Required for an Enterprise Grid org install |
 | `HR_Channel_Id__c` | C0BVCBYSEJV | `#hrms` |

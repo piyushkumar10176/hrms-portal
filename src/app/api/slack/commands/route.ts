@@ -37,6 +37,16 @@ import {
 } from "@/lib/salesforce-queries";
 import { toLeaveBalanceView } from "@/lib/leave-balance";
 import { businessTimeNow, businessToday } from "@/lib/business-time";
+import { SHIFT_START, SHIFT_END } from "@/lib/leave-days";
+import {
+  summarizeDay,
+  isCheckIn,
+  formatHours,
+  formatMinutes,
+  BREAK_ALLOWANCE_MINUTES,
+  MINIMUM_EFFECTIVE_HOURS,
+  type DaySummary,
+} from "@/lib/attendance";
 
 export const dynamic = "force-dynamic";
 
@@ -260,8 +270,7 @@ async function handleAttendance(
   if (text === "in" || text === "out") {
     const punches = await getTodayPunches(employeeId);
     const last = punches.length ? punches[punches.length - 1] : null;
-    const lastWasIn =
-      last ? (last.Punch_Type__c || "").toLowerCase().replace(/[^a-z]/g, "") === "checkin" : false;
+    const lastWasIn = last ? isCheckIn(last.Punch_Type__c) : false;
 
     if (text === "in" && lastWasIn) {
       await postToResponseUrl(responseUrl, ephemeral("You are already clocked in."));
@@ -280,28 +289,23 @@ async function handleAttendance(
       punchType: text === "in" ? "Check-In" : "Check-Out",
       source: "Slack",
     });
-    await postToResponseUrl(
-      responseUrl,
-      ephemeral(`Clocked ${text} at ${businessTimeNow()}.`)
-    );
+
+    // Re-read so the confirmation can carry the break this punch just closed,
+    // or the day's totals on the way out.
+    const day = summarizeDay(await getTodayPunches(employeeId));
+    await postToResponseUrl(responseUrl, ephemeral(punchConfirmation(text, day)));
     return;
   }
 
   if (text === "" || text === "today") {
-    const punches = await getTodayPunches(employeeId);
-    if (punches.length === 0) {
+    const day = summarizeDay(await getTodayPunches(employeeId));
+    if (day.log.length === 0) {
       await postToResponseUrl(responseUrl, ephemeral("No punches recorded today."));
       return;
     }
-    const lines = punches
-      .map((p) => `• ${p.Punch_Type__c} — ${p.Punch_DateTime__c}`)
-      .join("\n");
     await postToResponseUrl(responseUrl, {
       response_type: "ephemeral",
-      blocks: [
-        { type: "header", text: { type: "plain_text", text: "Today's punches" } },
-        { type: "section", text: { type: "mrkdwn", text: lines } },
-      ],
+      blocks: todayBlocks(day),
     });
     return;
   }
@@ -310,6 +314,78 @@ async function handleAttendance(
     responseUrl,
     ephemeral("Try `/attendance in`, `/attendance out` or `/attendance today`.")
   );
+}
+
+/** Confirms a punch and, where it matters, what it did to the day. */
+function punchConfirmation(direction: "in" | "out", day: DaySummary): string {
+  if (direction === "in") {
+    const closed = day.log.length ? day.log[day.log.length - 1].breakBeforeMinutes : undefined;
+    return closed
+      ? `Clocked in at ${businessTimeNow()} after a ${formatMinutes(closed)} break. ` +
+        `${formatMinutes(day.breakMinutes)} of break used today.`
+      : `Clocked in at ${businessTimeNow()}.`;
+  }
+  const worked = formatHours(day.effectiveHours);
+  const rest = day.breakMinutes > 0 ? `, ${formatMinutes(day.breakMinutes)} break` : "";
+  return `Clocked out at ${businessTimeNow()}. ${worked} effective${rest}.`;
+}
+
+/**
+ * The day as a readable log rather than a dump of timestamps: each punch on its
+ * own line with the break that preceded it, then the totals underneath.
+ */
+function todayBlocks(day: DaySummary): object[] {
+  // A Slack section caps at 3000 characters. A normal day is four punches, but a
+  // biometric device that double-fires can produce far more, so only the most
+  // recent are listed and the count says what was left out.
+  const MAX_LINES = 20;
+  const shown = day.log.slice(-MAX_LINES);
+  const omitted = day.log.length - shown.length;
+
+  const lines = shown.map((entry) => {
+    const icon = entry.type === "Check-In" ? ":large_green_circle:" : ":red_circle:";
+    const label = entry.type === "Check-In" ? "Clock in " : "Clock out";
+    const via = entry.source ? `  _via ${entry.source}_` : "";
+    const gap = entry.breakBeforeMinutes
+      ? `  — after a ${formatMinutes(entry.breakBeforeMinutes)} break`
+      : "";
+    return `${icon}  \`${entry.time}\`  ${label}${gap}${via}`;
+  });
+  if (omitted > 0) {
+    lines.unshift(`_${omitted} earlier ${omitted === 1 ? "punch" : "punches"} not shown_`);
+  }
+
+  const fields = [
+    `*Effective*\n${formatHours(day.effectiveHours)} of ${MINIMUM_EFFECTIVE_HOURS}h`,
+    `*Break*\n${formatMinutes(day.breakMinutes)} of ${formatMinutes(BREAK_ALLOWANCE_MINUTES)}` +
+      (day.breakOverAllowance ? "  :warning:" : ""),
+    `*On premises*\n${formatHours(day.grossHours)}`,
+    `*Status*\n${
+      day.onTheClock
+        ? "On the clock"
+        : day.breakOpenSince
+          ? `On break since ${day.breakOpenSince}`
+          : "Clocked out"
+    }`,
+  ];
+
+  return [
+    { type: "header", text: { type: "plain_text", text: "Today's attendance" } },
+    { type: "section", text: { type: "mrkdwn", text: lines.join("\n") } },
+    { type: "section", fields: fields.map((text) => ({ type: "mrkdwn", text })) },
+    {
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text:
+            `The shift runs ${SHIFT_START}–${SHIFT_END}: ${MINIMUM_EFFECTIVE_HOURS} effective hours ` +
+            `plus ${formatMinutes(BREAK_ALLOWANCE_MINUTES)} of break. ` +
+            "Break is the time between a clock-out and your next clock-in.",
+        },
+      ],
+    },
+  ];
 }
 
 /** Who is on approved leave today, visible to anyone who asks. */

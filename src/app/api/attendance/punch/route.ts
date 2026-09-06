@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getTodayPunches, createPunch as sfCreatePunch, createHistoryRecord } from "@/lib/salesforce-queries";
 import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
+import { summarizeDay, isCheckIn, formatMinutes } from "@/lib/attendance";
+import { businessToday, businessTimeNow } from "@/lib/business-time";
 
 export async function GET() {
   const session = await auth();
@@ -10,21 +12,12 @@ export async function GET() {
   try {
     const sfEmp = await getSessionEmployee(session);
     const punches = await getTodayPunches(sfEmp.Id);
-    
-    // Check for the most recent punches today
-    const clockInPunch = [...punches].reverse().find(p => p.Punch_Type__c === "Check-In");
-    const clockOutPunch = [...punches].reverse().find(p => p.Punch_Type__c === "Check-Out");
-    
-    if (clockInPunch) {
-      const today = {
-        clockIn: new Date(clockInPunch.Punch_DateTime__c).toLocaleTimeString("en-IN", {timeZone:"Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false}),
-        clockOut: clockOutPunch ? new Date(clockOutPunch.Punch_DateTime__c).toLocaleTimeString("en-IN", {timeZone:"Asia/Kolkata", hour:"2-digit",minute:"2-digit",hour12:false}) : null,
-        status: "Present"
-      };
-      return NextResponse.json({ today });
-    } else {
-      return NextResponse.json({ today: null });
-    }
+
+    // The whole day is returned, not just the first in and last out. Break time
+    // only exists in the gaps between punches, so a caller that sees a single
+    // pair cannot work out how long someone was away.
+    const day = summarizeDay(punches);
+    return NextResponse.json({ today: day.log.length ? day : null });
   } catch (error) {
     if (error instanceof StaleSessionError) {
       return NextResponse.json({ error: error.message }, { status: 401 });
@@ -58,9 +51,7 @@ export async function POST(req: NextRequest) {
     // the daily rollup would then derive nonsense hours from the pair.
     const todaysPunches = await getTodayPunches(sfEmp.Id);
     const lastPunch = todaysPunches.length ? todaysPunches[todaysPunches.length - 1] : null;
-    const lastWasCheckIn = lastPunch
-      ? (lastPunch.Punch_Type__c || "").toLowerCase().replace(/[^a-z]/g, "") === "checkin"
-      : false;
+    const lastWasCheckIn = lastPunch ? isCheckIn(lastPunch.Punch_Type__c) : false;
 
     if (action === "clockIn" && lastWasCheckIn) {
       return NextResponse.json(
@@ -80,32 +71,41 @@ export async function POST(req: NextRequest) {
         { status: 409 }
       );
     }
-    
+
     await sfCreatePunch({
       employeeId: sfEmp.Id,
       punchType,
       latitude,
       longitude,
-      source: "Web"
+      source: "Web",
     });
-    
-    // Create history record in SF
+
+    // Re-read rather than appending locally, so the response reflects what
+    // Salesforce actually stored, including a punch a biometric device may have
+    // written for the same person a moment ago.
+    const day = summarizeDay(await getTodayPunches(sfEmp.Id));
+
     await createHistoryRecord({
       employeeId: sfEmp.Id,
-      date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+      date: businessToday(),
       type: action === "clockIn" ? "Clock In" : "Clock Out",
-      description: `Clocked ${action === "clockIn" ? "in" : "out"} at ${new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false })}`
+      description:
+        action === "clockIn"
+          ? `Clocked in at ${businessTimeNow()}`
+          : `Clocked out at ${businessTimeNow()}, ${formatMinutes(day.breakMinutes)} break`,
     });
-    
-    const timeString = new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false });
-    return NextResponse.json({ 
-      record: { 
-        clockIn: action === "clockIn" ? timeString : null,
-        clockOut: action === "clockOut" ? timeString : null,
-        status: "Present"
-      }, 
-      message: `Clocked ${action === "clockIn" ? "in" : "out"} successfully` 
-    });
+
+    // A clock-in that closed a break is worth saying out loud, because the
+    // employee is about to wonder whether those minutes were counted.
+    const closedBreak = day.log.length ? day.log[day.log.length - 1].breakBeforeMinutes : undefined;
+    const message =
+      action === "clockIn"
+        ? closedBreak
+          ? `Clocked in at ${businessTimeNow()} after a ${formatMinutes(closedBreak)} break.`
+          : `Clocked in at ${businessTimeNow()}.`
+        : `Clocked out at ${businessTimeNow()}.`;
+
+    return NextResponse.json({ record: day, message });
   } catch (error) {
     if (error instanceof StaleSessionError) {
       return NextResponse.json({ error: error.message }, { status: 401 });

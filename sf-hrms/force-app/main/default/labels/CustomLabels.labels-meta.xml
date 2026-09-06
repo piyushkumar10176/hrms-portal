@@ -14,7 +14,7 @@
         <language>en_US</language>
         <protected>false</protected>
         <shortDescription>Hours worked that count as a full day when no shift is assigned</shortDescription>
-        <value>9</value>
+        <value>8</value>
     </labels>
     <labels>
         <fullName>HRMS_Default_Half_Day_Hours</fullName>
@@ -54,7 +54,7 @@
         <language>en_US</language>
         <protected>false</protected>
         <shortDescription>Hours that must be worked to avoid a short-shift penalty</shortDescription>
-        <value>9</value>
+        <value>8</value>
     </labels>
     <labels>
         <fullName>HRMS_Regularizations_Per_Month</fullName>
@@ -71,5 +71,13 @@
         <protected>false</protected>
         <shortDescription>Shift end time HH:mm used to describe half day sessions</shortDescription>
         <value>19:00</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Break_Allowance_Minutes</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>HRMS Break Allowance Minutes</shortDescription>
+        <value>60</value>
     </labels>
 </CustomLabels>

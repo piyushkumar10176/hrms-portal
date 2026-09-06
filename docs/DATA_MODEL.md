@@ -61,6 +61,22 @@ be edited by hand.
 `Attendance_Punch__c` whenever punches for that day change. `Shift__c` and
 `Shift_Assignment__c` are empty, so the rollup falls back to default hours.
 
+The three hour fields on `Attendance__c` are easy to confuse:
+
+| Field | Means |
+|---|---|
+| `Total_Hours__c` (**Effective Hours**) | Sum of each clock-in to clock-out stretch, breaks excluded. This is what the penalty rules measure. |
+| `Gross_Hours__c` | First clock-in to the last punch of the day, breaks included. |
+| `Break_Minutes__c` | Sum of every gap between a clock-out and the next clock-in. |
+
+On a finished day, gross equals effective plus break.
+
+`Attendance_Punch__c.External_Punch_ID__c` is a unique external id holding the
+punch's identity on the device that recorded it (`device:employee:timestamp`). It
+is what stops a biometric terminal replaying its buffer from recording the same
+punch twice, which would invent break time nobody took. It is blank for punches
+made in the portal or in Slack.
+
 ### Notifications and history
 
 | Object | Field | Type | Points at |

@@ -257,6 +257,16 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Attendance_Punch__c.Device_ID__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Attendance_Punch__c.External_Punch_ID__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>Attendance_Punch__c.Employee__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -283,6 +293,16 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Attendance_Punch__c.Source__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Attendance__c.Break_Minutes__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Attendance__c.Gross_Hours__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -1077,6 +1097,10 @@
     </fieldPermissions>
     <classAccesses>
         <apexClass>SlackService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>AttendancePunchSlackNotifier</apexClass>
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>

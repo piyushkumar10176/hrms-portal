@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>External_Punch_ID__c</fullName>
+    <label>External Punch ID</label>
+    <description>The punch's identity on the device that recorded it, as deviceId:timestamp. Unique and indexed so a biometric device replaying a batch cannot create the same punch twice, which would corrupt the derived break time.</description>
+    <inlineHelpText>Set by the biometric integration. Leave blank for punches made in the portal or Slack.</inlineHelpText>
+    <type>Text</type>
+    <length>120</length>
+    <externalId>true</externalId>
+    <unique>true</unique>
+    <caseSensitive>false</caseSensitive>
+    <required>false</required>
+</CustomField>

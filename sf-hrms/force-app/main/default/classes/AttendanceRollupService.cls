@@ -2,9 +2,16 @@
  * Rebuilds daily Attendance__c rows from raw Attendance_Punch__c records.
  *
  * Punches are the source of truth. For each affected (Employee, business date)
- * this service derives the first check-in, the last check-out, hours worked,
- * lateness against the assigned shift, and a day status, then upserts the
- * matching Attendance__c row.
+ * this service derives the first check-in, the last check-out, break minutes,
+ * gross and effective hours, lateness against the assigned shift, and a day
+ * status, then upserts the matching Attendance__c row.
+ *
+ * Breaks are the gaps between punches: every time an employee checks out and
+ * checks back in on the same business day, the interval between those two
+ * punches is unpaid break. Clocking in at 10:00, out at 10:30 and back in at
+ * 11:15 is 45 minutes of break. The shift spans nine hours of which eight are
+ * effective and one is break, so Total_Hours__c holds gross minus break and it
+ * is that effective figure the attendance policy judges.
  *
  * Dates are bucketed in the HRMS business time zone (Custom Label
  * HRMS_Business_Time_Zone), not the running user's. The integration user runs in
@@ -38,6 +45,41 @@ public with sharing class AttendanceRollupService {
         } catch (Exception e) {
             return fallback;
         }
+    }
+
+    // ---- Public façade -----------------------------------------------------
+    // Attendance policy lives here, so anything that reports on a day (the Slack
+    // punch notifier, the daily digest) reads its constants through these rather
+    // than re-deriving them and drifting.
+
+    /** The time zone attendance days are bucketed and rendered in. */
+    public static String businessTimeZoneName() {
+        return businessTimeZone();
+    }
+
+    /** The calendar date an instant falls on in the business time zone. */
+    public static Date businessDateOf(DateTime instant) {
+        return instant == null ? null : toBusinessDate(instant);
+    }
+
+    /** True when a free-text punch type means a check-in. */
+    public static Boolean isCheckInType(String punchType) {
+        return isCheckIn(punchType);
+    }
+
+    /** Effective hours a full working day must reach before it is flagged. */
+    public static Decimal minimumEffectiveHours() {
+        return labelAsDecimal(Label.HRMS_Penalty_Minimum_Hours, 8);
+    }
+
+    /** Break an employee may take inside the shift without eating into the day. */
+    public static Decimal breakAllowanceMinutes() {
+        return labelAsDecimal(Label.HRMS_Break_Allowance_Minutes, 60);
+    }
+
+    /** Renders a minute count as "1h 15m", "45m" or "0m". */
+    public static String minutesText(Decimal minutes) {
+        return formatMinutes(minutes);
     }
 
     /**
@@ -130,7 +172,8 @@ public with sharing class AttendanceRollupService {
         Map<String, Attendance__c> existingByKey = new Map<String, Attendance__c>();
         for (Attendance__c attendance : [
             SELECT Id, Employee__c, Date__c, Check_In__c, Check_Out__c,
-                   Total_Hours__c, Late_By_Minutes__c, Status__c
+                   Total_Hours__c, Gross_Hours__c, Break_Minutes__c,
+                   Late_By_Minutes__c, Status__c, Penalty__c, Penalty_Reason__c
             FROM Attendance__c
             WHERE Employee__c IN :employeeIds
               AND Date__c >= :windowStart
@@ -162,6 +205,8 @@ public with sharing class AttendanceRollupService {
 
             row.Check_In__c = totals.firstCheckIn;
             row.Check_Out__c = totals.lastCheckOut;
+            row.Gross_Hours__c = totals.grossHours();
+            row.Break_Minutes__c = totals.breakMinutes();
             row.Total_Hours__c = totals.hoursWorked();
             row.Late_By_Minutes__c = totals.lateMinutes(shift, businessTimeZone());
             row.Status__c = deriveStatus(totals, shift, holidayDates);
@@ -185,10 +230,17 @@ public with sharing class AttendanceRollupService {
         }
     }
 
+    /**
+     * Every field compared here must appear in the query above. The comparison
+     * short-circuits, so a missing field stays invisible until the day is
+     * rebuilt with nothing else changed, and only then throws.
+     */
     private static Boolean isChanged(Attendance__c existing, Attendance__c candidate) {
         return existing.Check_In__c != candidate.Check_In__c
             || existing.Check_Out__c != candidate.Check_Out__c
             || existing.Total_Hours__c != candidate.Total_Hours__c
+            || existing.Gross_Hours__c != candidate.Gross_Hours__c
+            || existing.Break_Minutes__c != candidate.Break_Minutes__c
             || existing.Late_By_Minutes__c != candidate.Late_By_Minutes__c
             || existing.Status__c != candidate.Status__c
             || existing.Penalty__c != candidate.Penalty__c
@@ -200,7 +252,13 @@ public with sharing class AttendanceRollupService {
      *
      * Two breaches, both configurable by Custom Label:
      *   arriving at or after HRMS_Penalty_Arrival_Time, and
-     *   working less than HRMS_Penalty_Minimum_Hours.
+     *   working less than HRMS_Penalty_Minimum_Hours of effective time.
+     *
+     * The hours test reads effective hours, not time on premises, so a long
+     * lunch shortens the day exactly as leaving early does. Overrunning
+     * HRMS_Break_Allowance_Minutes is reported inside the reason rather than
+     * penalised on its own: an employee who breaks for ninety minutes and stays
+     * ninety minutes later has still done the work.
      *
      * Days that are not working days are never penalised, and a day still open
      * because there is no check-out is left alone rather than judged early.
@@ -226,10 +284,20 @@ public with sharing class AttendanceRollupService {
         }
 
         Decimal hours = totals.hoursWorked();
-        Decimal minimumHours = labelAsDecimal(Label.HRMS_Penalty_Minimum_Hours, 9);
+        Decimal minimumHours = labelAsDecimal(Label.HRMS_Penalty_Minimum_Hours, 8);
         if (hours != null && hours < minimumHours) {
-            reasons.add('worked ' + String.valueOf(hours) + ' of ' +
-                        String.valueOf(minimumHours) + ' hours');
+            String reason = 'worked ' + String.valueOf(hours) + ' of ' +
+                            String.valueOf(minimumHours) + ' effective hours';
+            Decimal breakTaken = totals.breakMinutes();
+            Decimal allowance = labelAsDecimal(Label.HRMS_Break_Allowance_Minutes, 60);
+            if (breakTaken != null && breakTaken > 0) {
+                reason += ' (' + formatMinutes(breakTaken) + ' break';
+                if (breakTaken > allowance) {
+                    reason += ', over the ' + formatMinutes(allowance) + ' allowance';
+                }
+                reason += ')';
+            }
+            reasons.add(reason);
         }
 
         return reasons.isEmpty() ? null : String.join(reasons, '; ');
@@ -319,12 +387,27 @@ public with sharing class AttendanceRollupService {
         return punchType != null && CHECK_IN_ALIASES.contains(punchType.toLowerCase().trim());
     }
 
-    /** Accumulates the punches for a single employee-day. */
+    /**
+     * Accumulates the punches for a single employee-day.
+     *
+     * Punches arrive in chronological order, which is what lets breaks be
+     * derived by a single pass: an out-then-in pair bounds a break, and any
+     * punch that repeats the previous one (a double check-in from a device that
+     * fired twice) is ignored for break purposes rather than treated as a gap.
+     */
     private class DayTotals {
         private Id employeeId;
         private Date businessDate;
         private DateTime firstCheckIn;
         private DateTime lastCheckOut;
+
+        /** Set when the last punch seen was a check-out and a break may be open. */
+        private DateTime openBreakStart;
+        /** Set when the last punch seen was a check-in and work is in progress. */
+        private DateTime openWorkStart;
+        private DateTime lastPunch;
+        private Integer accumulatedBreakSeconds = 0;
+        private Integer accumulatedWorkSeconds = 0;
 
         private DayTotals(Id employeeId, Date businessDate) {
             this.employeeId = employeeId;
@@ -332,13 +415,40 @@ public with sharing class AttendanceRollupService {
         }
 
         private void apply(Attendance_Punch__c punch) {
+            DateTime stamp = punch.Punch_DateTime__c;
+            if (lastPunch == null || stamp > lastPunch) {
+                lastPunch = stamp;
+            }
+
             if (isCheckIn(punch.Punch_Type__c)) {
-                if (firstCheckIn == null || punch.Punch_DateTime__c < firstCheckIn) {
-                    firstCheckIn = punch.Punch_DateTime__c;
+                if (firstCheckIn == null || stamp < firstCheckIn) {
+                    firstCheckIn = stamp;
+                }
+                // A check-in that closes an open check-out is the far edge of a
+                // break. Breaks only exist between the day's first check-in and
+                // its last check-out, so a leading check-out is not one.
+                if (openBreakStart != null && stamp > openBreakStart) {
+                    accumulatedBreakSeconds +=
+                        (Integer) ((stamp.getTime() - openBreakStart.getTime()) / 1000);
+                }
+                openBreakStart = null;
+                // Only the first check-in of a run opens the working stretch, so a
+                // device firing twice cannot shorten the time it credits.
+                if (openWorkStart == null) {
+                    openWorkStart = stamp;
                 }
             } else {
-                if (lastCheckOut == null || punch.Punch_DateTime__c > lastCheckOut) {
-                    lastCheckOut = punch.Punch_DateTime__c;
+                if (lastCheckOut == null || stamp > lastCheckOut) {
+                    lastCheckOut = stamp;
+                }
+                // A check-out closes the working stretch it was opened by.
+                if (openWorkStart != null && stamp > openWorkStart) {
+                    accumulatedWorkSeconds +=
+                        (Integer) ((stamp.getTime() - openWorkStart.getTime()) / 1000);
+                }
+                openWorkStart = null;
+                if (openBreakStart == null && firstCheckIn != null) {
+                    openBreakStart = stamp;
                 }
             }
         }
@@ -347,12 +457,44 @@ public with sharing class AttendanceRollupService {
             return firstCheckIn != null || lastCheckOut != null;
         }
 
-        private Decimal hoursWorked() {
-            if (firstCheckIn == null || lastCheckOut == null || lastCheckOut < firstCheckIn) {
+        /** Break taken during the day, in whole minutes. Never null once punched. */
+        private Decimal breakMinutes() {
+            if (!hasAnyPunch()) {
                 return null;
             }
-            Long millis = lastCheckOut.getTime() - firstCheckIn.getTime();
+            return Math.round(Decimal.valueOf(accumulatedBreakSeconds) / 60);
+        }
+
+        /**
+         * Elapsed time from the first check-in to the last punch of the day,
+         * breaks included. For a finished day that last punch is the check-out,
+         * so this is time on premises; while a day is still open it is time
+         * elapsed since arriving.
+         */
+        private Decimal grossHours() {
+            if (firstCheckIn == null || lastPunch == null || lastPunch < firstCheckIn) {
+                return null;
+            }
+            Long millis = lastPunch.getTime() - firstCheckIn.getTime();
             return (Decimal.valueOf(millis) / 3600000).setScale(2);
+        }
+
+        /**
+         * Hours actually worked: the sum of each check-in to check-out stretch.
+         *
+         * Summing the stretches is deliberate rather than subtracting break from
+         * the span. The two agree on a finished day, but partway through one they
+         * do not: an employee who has clocked back in from lunch but not yet left
+         * has a break longer than the span between their first check-in and their
+         * last check-out, and subtracting would report a negative day as zero.
+         */
+        private Decimal hoursWorked() {
+            if (accumulatedWorkSeconds == 0) {
+                // Checked in and not yet out: no stretch has closed, so there is
+                // nothing to count and the day is left open rather than judged.
+                return null;
+            }
+            return (Decimal.valueOf(accumulatedWorkSeconds) / 3600).setScale(2);
         }
 
         private Decimal lateMinutes(Shift__c shift, String timeZoneName) {
@@ -380,6 +522,21 @@ public with sharing class AttendanceRollupService {
             Decimal late = arrivalMinutes - startMinutes - grace;
             return late > 0 ? late : 0;
         }
+    }
+
+    /** Renders a minute count as "1h 15m", "45m" or "0m". */
+    @TestVisible
+    private static String formatMinutes(Decimal minutes) {
+        if (minutes == null) {
+            return '0m';
+        }
+        Integer total = Integer.valueOf(minutes.setScale(0, System.RoundingMode.HALF_UP));
+        Integer hours = total / 60;
+        Integer remainder = Math.mod(total, 60);
+        if (hours == 0) {
+            return remainder + 'm';
+        }
+        return remainder == 0 ? hours + 'h' : hours + 'h ' + remainder + 'm';
     }
 
     /** Parses "HH:mm" into minutes past midnight, or null when unparseable. */

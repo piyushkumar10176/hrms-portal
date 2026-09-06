@@ -55,10 +55,11 @@ export interface SFAttendancePunch {
   Id: string;
   Employee__c: string;
   Punch_DateTime__c: string;
-  Punch_Type__c: "Check-In" | "Check-Out";
+  /** Free text in Salesforce; use isCheckIn() from lib/attendance rather than comparing. */
+  Punch_Type__c: string;
   Latitude__c?: number;
   Longitude__c?: number;
-  Source__c: "Web" | "Mobile" | "Biometric";
+  Source__c: "Web" | "Mobile" | "Biometric" | "Slack";
   External_Punch_ID__c?: string;
   Device_ID__c?: string;
 }
@@ -69,9 +70,16 @@ export interface SFAttendance {
   Date__c: string;
   Check_In__c?: string;
   Check_Out__c?: string;
+  /** Effective hours: gross less every break. This is what the policy measures. */
   Total_Hours__c?: number;
+  /** First check-in to last check-out, breaks included. */
+  Gross_Hours__c?: number;
+  /** Sum of the gaps between each check-out and the next check-in. */
+  Break_Minutes__c?: number;
   Late_By_Minutes__c?: number;
   Status__c: "Present" | "Absent" | "Half Day" | "Leave" | "Holiday" | "Week Off";
+  Penalty__c?: boolean;
+  Penalty_Reason__c?: string;
 }
 
 export interface SFLeaveType {
@@ -234,15 +242,20 @@ export async function getTodayPunches(employeeId: string): Promise<SFAttendanceP
 export async function createPunch(data: {
   employeeId: string;
   punchType: "Check-In" | "Check-Out";
+  /** When the punch happened. Defaults to now; a device sends its own timestamp. */
+  punchDateTime?: string;
   latitude?: number;
   longitude?: number;
   source?: "Web" | "Mobile" | "Biometric" | "Slack";
   externalPunchId?: string;
   deviceId?: string;
 }): Promise<string> {
+  // The timestamp used to be hardcoded to now, which was right for a portal
+  // punch and wrong for a device replaying a batch: every imported punch was
+  // filed at import time rather than when it happened.
   return createRecord("Attendance_Punch__c", {
     Employee__c: data.employeeId,
-    Punch_DateTime__c: new Date().toISOString(),
+    Punch_DateTime__c: data.punchDateTime || new Date().toISOString(),
     Punch_Type__c: data.punchType,
     Latitude__c: data.latitude,
     Longitude__c: data.longitude,
@@ -250,6 +263,45 @@ export async function createPunch(data: {
     External_Punch_ID__c: data.externalPunchId,
     Device_ID__c: data.deviceId,
   });
+}
+
+/**
+ * Returns the punch ids already recorded for the given device punch identities.
+ *
+ * A biometric terminal that loses its uplink replays its buffer on reconnect, so
+ * the same punch arrives more than once. A replayed punch would otherwise show
+ * up as an extra clock-out and clock-in pair and invent break time that nobody
+ * took.
+ */
+export async function findPunchesByExternalId(
+  externalIds: string[]
+): Promise<Map<string, string>> {
+  const known = new Map<string, string>();
+  if (externalIds.length === 0) return known;
+  const quoted = externalIds.map(id => `'${escapeSoqlString(id)}'`).join(",");
+  const rows = await query<{ Id: string; External_Punch_ID__c: string }>(`
+    SELECT Id, External_Punch_ID__c
+    FROM Attendance_Punch__c
+    WHERE External_Punch_ID__c IN (${quoted})
+  `);
+  for (const row of rows) known.set(row.External_Punch_ID__c, row.Id);
+  return known;
+}
+
+/** Resolves employee codes to Salesforce ids in one query. */
+export async function findEmployeesByCode(
+  codes: string[]
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+  if (codes.length === 0) return found;
+  const quoted = codes.map(code => `'${escapeSoqlString(code)}'`).join(",");
+  const rows = await query<{ Id: string; Employee_Code__c: string }>(`
+    SELECT Id, Employee_Code__c
+    FROM Employee__c
+    WHERE Employee_Code__c IN (${quoted})
+  `);
+  for (const row of rows) found.set(row.Employee_Code__c, row.Id);
+  return found;
 }
 
 /**
@@ -265,7 +317,8 @@ export async function getMonthlyAttendance(
 
   return query<SFAttendance>(`
     SELECT Id, Date__c, Check_In__c, Check_Out__c, Total_Hours__c,
-           Late_By_Minutes__c, Status__c
+           Gross_Hours__c, Break_Minutes__c, Late_By_Minutes__c, Status__c,
+           Penalty__c, Penalty_Reason__c
     FROM Attendance__c
     WHERE Employee__c = '${assertSalesforceId(employeeId)}'
     AND Date__c >= ${startDate}
