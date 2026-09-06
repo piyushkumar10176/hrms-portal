@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
+import { assertSalesforceId } from "@/lib/soql";
 
 export async function GET() {
   const session = await auth();
@@ -13,7 +14,7 @@ export async function GET() {
         (SELECT Id, Category__c, Description__c, Amount__c, Date__c, Receipt_URL__c
          FROM Lines__r ORDER BY Date__c DESC)
       FROM Expense_Report__c
-      WHERE Employee__c = '${session.user.id}'
+      WHERE Employee__c = '${assertSalesforceId(session.user.id)}'
       ORDER BY CreatedDate DESC
       LIMIT 50
     `);
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const emps = await query<any>(`SELECT Reporting_Manager__c FROM Employee__c WHERE Id = '${session.user.id}'`);
+    const emps = await query<any>(`SELECT Reporting_Manager__c FROM Employee__c WHERE Id = '${assertSalesforceId(session.user.id)}'`);
     const mgr = emps[0]?.Reporting_Manager__c || null;
 
     const id = await createRecord("Expense_Report__c", {

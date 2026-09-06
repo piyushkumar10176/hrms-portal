@@ -9,6 +9,7 @@
  */
 
 import { query, queryOne, queryOneOrNull, createRecord } from "./salesforce";
+import { assertSalesforceId, escapeSoqlString } from "./soql";
 
 // ============================================
 // Type Definitions (mirror Salesforce objects)
@@ -144,7 +145,7 @@ export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
            Designation_Ref__c, Designation_Ref__r.Name, Designation_Ref__r.Code__c,
            Employment_Type__c, Probation_End_Date__c, Confirmation_Date__c, Resignation_Date__c, LWD__c
     FROM Employee__c
-    WHERE Official_Email__c = '${email}'
+    WHERE Official_Email__c = '${escapeSoqlString(email)}'
     AND Employee_Status__c = 'Active'
     LIMIT 1
   `);
@@ -166,7 +167,7 @@ export async function getEmployeeById(id: string): Promise<SFEmployee> {
            Designation_Ref__c, Designation_Ref__r.Name, Designation_Ref__r.Code__c,
            Employment_Type__c, Probation_End_Date__c, Confirmation_Date__c, Resignation_Date__c, LWD__c
     FROM Employee__c
-    WHERE Id = '${id}'
+    WHERE Id = '${assertSalesforceId(id)}'
     LIMIT 1
   `);
 }
@@ -181,7 +182,7 @@ export async function getTeamMembers(managerEmployeeId: string): Promise<SFEmplo
            Department_Ref__c, Department_Ref__r.Name, Designation_Ref__c, Designation_Ref__r.Name,
            Employee_Status__c, Role__c
     FROM Employee__c
-    WHERE Reporting_Manager__c = '${managerEmployeeId}'
+    WHERE Reporting_Manager__c = '${assertSalesforceId(managerEmployeeId)}'
     AND Employee_Status__c = 'Active'
     ORDER BY First_Name__c
   `);
@@ -216,7 +217,7 @@ export async function getTodayPunches(employeeId: string): Promise<SFAttendanceP
     SELECT Id, Punch_DateTime__c, Punch_Type__c, Latitude__c, 
            Longitude__c, Source__c
     FROM Attendance_Punch__c
-    WHERE Employee__c = '${employeeId}'
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
     AND DAY_ONLY(Punch_DateTime__c) = ${today}
     ORDER BY Punch_DateTime__c ASC
   `);
@@ -261,7 +262,7 @@ export async function getMonthlyAttendance(
     SELECT Id, Date__c, Check_In__c, Check_Out__c, Total_Hours__c,
            Late_By_Minutes__c, Status__c
     FROM Attendance__c
-    WHERE Employee__c = '${employeeId}'
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
     AND Date__c >= ${startDate}
     AND Date__c <= ${endDate}
     ORDER BY Date__c ASC
@@ -281,7 +282,7 @@ export async function getLeaveBalances(employeeId: string): Promise<SFLeaveBalan
     SELECT Id, Leave_Type__c, Leave_Type__r.Name, Leave_Type__r.Code__c,
            Year__c, Opening_Balance__c, Accrued__c, Availed__c, Closing_Balance__c
     FROM Leave_Balance__c
-    WHERE Employee__c = '${employeeId}'
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
     AND Year__c = '${currentYear}'
     ORDER BY Leave_Type__r.Name
   `);
@@ -336,7 +337,7 @@ export async function getLeaveRequests(
            From_Date__c, To_Date__c, Days__c, Half_Day__c, Reason__c,
            Status__c, Approver__r.Name, CreatedDate
     FROM Leave_Request__c
-    WHERE Employee__c = '${employeeId}'
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
   `;
   if (status) {
     soql += ` AND Status__c = '${status}'`;
@@ -356,8 +357,8 @@ export async function getPendingApprovals(managerEmployeeId: string): Promise<SF
            From_Date__c, To_Date__c, Days__c, Half_Day__c, Reason__c,
            Status__c, Approver__c, Approver__r.Name, CreatedDate
     FROM Leave_Request__c
-    WHERE (Approver__c = '${managerEmployeeId}'
-           OR Employee__r.Reporting_Manager__c = '${managerEmployeeId}')
+    WHERE (Approver__c = '${assertSalesforceId(managerEmployeeId)}'
+           OR Employee__r.Reporting_Manager__c = '${assertSalesforceId(managerEmployeeId)}')
     AND Status__c = 'Submitted'
     ORDER BY CreatedDate ASC
   `);
@@ -369,7 +370,7 @@ export async function getPendingRegularizationApprovals(managerEmployeeId: strin
            Date__c, Requested_Clock_In__c, Requested_Clock_Out__c, Reason__c,
            Status__c, CreatedDate
     FROM Regularization_Request__c
-    WHERE Approver__c = '${managerEmployeeId}'
+    WHERE Approver__c = '${assertSalesforceId(managerEmployeeId)}'
     AND Status__c = 'Submitted'
     ORDER BY CreatedDate ASC
   `);
@@ -380,7 +381,7 @@ export async function getPendingExpenseApprovals(managerEmployeeId: string) {
     SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
            Title__c, Total_Amount__c, Notes__c, Status__c, CreatedDate
     FROM Expense_Report__c
-    WHERE Approver__c = '${managerEmployeeId}'
+    WHERE Approver__c = '${assertSalesforceId(managerEmployeeId)}'
     AND Status__c = 'Submitted'
     ORDER BY CreatedDate ASC
   `);
@@ -391,7 +392,7 @@ export async function getPendingReimbursementApprovals(managerEmployeeId: string
     SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
            Component__r.Name, Amount_Claimed__c, Status__c, CreatedDate
     FROM Reimbursement__c
-    WHERE Approver__c = '${managerEmployeeId}'
+    WHERE Approver__c = '${assertSalesforceId(managerEmployeeId)}'
     AND Status__c = 'Submitted'
     ORDER BY CreatedDate ASC
   `);
@@ -409,7 +410,7 @@ export async function getTeamLeaveCalendar(
     SELECT Id, Employee__r.Name, Employee__r.Photograph__c,
            Leave_Type__r.Name, From_Date__c, To_Date__c, Days__c, Status__c
     FROM Leave_Request__c
-    WHERE Employee__r.Reporting_Manager__c = '${managerEmployeeId}'
+    WHERE Employee__r.Reporting_Manager__c = '${assertSalesforceId(managerEmployeeId)}'
     AND Status__c = 'Approved'
     AND From_Date__c <= ${endDate}
     AND To_Date__c >= ${startDate}
@@ -445,7 +446,7 @@ export async function getHistoryRecords(employeeId: string) {
       Date__c: string;
       Type__c: string;
       Description__c: string;
-    }>(`SELECT Id, Date__c, Type__c, Description__c FROM HistoryRecord__c WHERE Employee__c = '${employeeId}' ORDER BY Date__c DESC`);
+    }>(`SELECT Id, Date__c, Type__c, Description__c FROM HistoryRecord__c WHERE Employee__c = '${assertSalesforceId(employeeId)}' ORDER BY Date__c DESC`);
     
     return records.map(r => ({
       id: r.Id,
@@ -504,7 +505,7 @@ export async function getPayslips(employeeId: string) {
       SELECT Id, Month__c, Basic__c, HRA__c, Conveyance__c, Medical__c, Special__c,
              PF__c, ESI__c, Professional_Tax__c, TDS__c, Net_Pay__c, Status__c, Paid_On__c
       FROM Payslip__c
-      WHERE Employee__c = '${employeeId}'
+      WHERE Employee__c = '${assertSalesforceId(employeeId)}'
       ORDER BY Paid_On__c DESC
     `);
     
@@ -553,7 +554,7 @@ export async function getSalaryStructure(employeeId: string) {
              Salary_Component__r.Display_Order__c,
              Monthly_Amount__c, Annual_Amount__c, CTC__c, Effective_Date__c
       FROM Employee_Salary_Structure__c
-      WHERE Employee__c = '${employeeId}'
+      WHERE Employee__c = '${assertSalesforceId(employeeId)}'
       ORDER BY Salary_Component__r.Display_Order__c ASC
     `);
 
@@ -615,7 +616,7 @@ export async function getTaxDeclaration(employeeId: string, fy?: string) {
              HRA_Rent_Paid__c, Landlord_PAN__c, Home_Loan_Interest__c,
              Other_Income__c, Previous_Employer_TDS__c, Status__c
       FROM Tax_Declaration__c
-      WHERE Employee__c = '${employeeId}' AND Financial_Year__c = '${financialYear}'
+      WHERE Employee__c = '${assertSalesforceId(employeeId)}' AND Financial_Year__c = '${escapeSoqlString(financialYear)}'
       LIMIT 1
     `);
 

@@ -9,11 +9,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const resolvedParams = await params;
   const id = resolvedParams.id;
-  
+
+  // Authorization: sensitive personal and financial identifiers are visible only to
+  // the employee themselves or to an admin. Every other authenticated viewer gets the
+  // colleague-visible subset used by the profile page and org chart.
+  const isSelf = session.user.id === id;
+  const isAdmin = session.user.role === "admin";
+  const canSeeSensitive = isSelf || isAdmin;
+
   try {
     const sfEmp = await getEmployeeById(id);
-    
-    const publicEmp = {
+
+    const publicEmp: Record<string, unknown> = {
       id: sfEmp.Id,
       employeeId: sfEmp.Employee_Code__c || sfEmp.Id,
       firstName: sfEmp.First_Name__c || sfEmp.Name?.split(" ")?.[0] || "",
@@ -32,15 +39,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       status: sfEmp.Employee_Status__c,
       gender: sfEmp.Gender__c,
       dateOfBirth: sfEmp.DOB__c,
-      bankName: sfEmp.Bank_Name__c,
-      accountNumber: sfEmp.Bank_Account_Number__c,
-      ifscCode: sfEmp.IFSC_Code__c,
-      panNumber: sfEmp.PAN__c,
-      aadharNumber: sfEmp.Aadhaar__c,
       role: sfEmp.Role__c?.toLowerCase() || "employee"
     };
 
-    const history = await getHistoryRecords(id);
+    if (canSeeSensitive) {
+      publicEmp.bankName = sfEmp.Bank_Name__c;
+      publicEmp.accountNumber = sfEmp.Bank_Account_Number__c;
+      publicEmp.ifscCode = sfEmp.IFSC_Code__c;
+      publicEmp.panNumber = sfEmp.PAN__c;
+      publicEmp.aadharNumber = sfEmp.Aadhaar__c;
+    }
+
+    // Employment history is visible to the employee, an admin, or their reporting manager.
+    const isManager = sfEmp.Reporting_Manager__c === session.user.id;
+    const history = canSeeSensitive || isManager ? await getHistoryRecords(id) : [];
+
     return NextResponse.json({ employee: publicEmp, history });
   } catch (err) {
     console.error("Salesforce getEmployeeById error:", err);

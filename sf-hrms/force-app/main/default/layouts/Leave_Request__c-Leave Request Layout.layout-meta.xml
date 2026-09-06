@@ -80,12 +80,7 @@
         <style>TwoColumnsLeftToRight</style>
     </layoutSections>
     <relatedLists>
-        <fields>CREATED_DATE</fields>
-        <fields>field</fields>
-        <fields>OldValue</fields>
-        <fields>NewValue</fields>
-        <fields>CREATEDBY_USER.NAME</fields>
-        <relatedList>Leave_Request__History</relatedList>
+        <relatedList>RelatedHistoryList</relatedList>
     </relatedLists>
     <showEmailCheckbox>false</showEmailCheckbox>
     <showRunAssignmentRulesCheckbox>false</showRunAssignmentRulesCheckbox>

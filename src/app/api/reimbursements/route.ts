@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
+import { assertSalesforceId } from "@/lib/soql";
 
 export async function GET() {
   const session = await auth();
@@ -11,7 +12,7 @@ export async function GET() {
       SELECT Id, Name, Component__r.Name, Amount_Claimed__c, Amount_Approved__c,
              Status__c, Cycle__r.Name, CreatedDate
       FROM Reimbursement__c
-      WHERE Employee__c = '${session.user.id}'
+      WHERE Employee__c = '${assertSalesforceId(session.user.id)}'
       ORDER BY CreatedDate DESC
       LIMIT 50
     `);

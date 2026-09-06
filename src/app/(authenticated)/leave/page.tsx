@@ -26,17 +26,19 @@ export default function LeavePage() {
     if (new Date(form.fromDate) < new Date(new Date().toISOString().split("T")[0])) { setMsg({ text: "Cannot apply leave for past dates", type: "error" }); return; }
 
     setSubmitting(true);
-    const from = new Date(form.fromDate);
-    const to = new Date(form.toDate);
-    const days = Math.ceil((to.getTime() - from.getTime()) / 86400000) + 1;
 
+    // The number of working days is calculated by the server from the date range,
+    // excluding weekends and public holidays. The client no longer sends a count.
     const res = await fetch("/api/leave/apply", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...form, days }),
+      body: JSON.stringify(form),
     });
     const data = await res.json();
     if (res.ok) {
-      setMsg({ text: data.message, type: "success" });
+      const summary = typeof data.days === "number"
+        ? `${data.message} ${data.days} working day(s) deducted, ${data.remaining} remaining.`
+        : data.message;
+      setMsg({ text: summary, type: "success" });
       setShowForm(false);
       setForm({ leaveType: "Casual Leave", fromDate: "", toDate: "", reason: "" });
       refreshData();

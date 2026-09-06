@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { queryOneOrNull, updateRecord } from "@/lib/salesforce";
 import { compareSync, hashSync } from "bcryptjs";
+import { assertSalesforceId } from "@/lib/soql";
 
 export async function POST(req: NextRequest) {
   const session = await auth();
@@ -14,7 +15,7 @@ export async function POST(req: NextRequest) {
   try {
     // Fetch current hash from SF
     const emp = await queryOneOrNull<{ Id: string; Password_Hash__c: string }>(`
-      SELECT Id, Password_Hash__c FROM Employee__c WHERE Id = '${session.user.id}' LIMIT 1
+      SELECT Id, Password_Hash__c FROM Employee__c WHERE Id = '${assertSalesforceId(session.user.id)}' LIMIT 1
     `);
     if (!emp || !emp.Password_Hash__c) return NextResponse.json({ error: "Employee not found" }, { status: 404 });
 

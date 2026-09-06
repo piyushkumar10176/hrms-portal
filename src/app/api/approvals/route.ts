@@ -19,12 +19,26 @@ export async function GET() {
   try {
     const sfEmp = await getEmployeeByEmail(session.user.email);
     
-    // Fetch all pending approvals in parallel
+    // Fetch all pending approvals in parallel. A failure in one source must not
+    // hide the others, but it must not be silent either: previously each source
+    // was wrapped in .catch(() => []) so a broken query showed as "nothing to
+    // approve" and no one could tell the difference.
+    const degradedSources: string[] = [];
+    const settle = async <T,>(name: string, work: Promise<T[]>): Promise<T[]> => {
+      try {
+        return await work;
+      } catch (err) {
+        console.error(`Approvals source "${name}" failed:`, err);
+        degradedSources.push(name);
+        return [];
+      }
+    };
+
     const [leaveReqs, regReqs, expReqs, reimbReqs] = await Promise.all([
-      getPendingApprovals(sfEmp.Id).catch(() => []),
-      getPendingRegularizationApprovals(sfEmp.Id).catch(() => []),
-      getPendingExpenseApprovals(sfEmp.Id).catch(() => []),
-      getPendingReimbursementApprovals(sfEmp.Id).catch(() => [])
+      settle("leave", getPendingApprovals(sfEmp.Id)),
+      settle("regularization", getPendingRegularizationApprovals(sfEmp.Id)),
+      settle("expense", getPendingExpenseApprovals(sfEmp.Id)),
+      settle("reimbursement", getPendingReimbursementApprovals(sfEmp.Id))
     ]);
     
     // Map leaves
@@ -75,7 +89,11 @@ export async function GET() {
       new Date(b.appliedOn).getTime() - new Date(a.appliedOn).getTime()
     );
     
-    return NextResponse.json({ approvals, source: "salesforce" });
+    return NextResponse.json({
+      approvals,
+      source: "salesforce",
+      ...(degradedSources.length ? { degradedSources } : {})
+    });
   } catch (err) {
     console.error("Salesforce getPendingApprovals error:", err);
     return NextResponse.json({ error: "Failed to fetch approvals" }, { status: 500 });

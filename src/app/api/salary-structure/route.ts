@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
+import { assertSalesforceId } from "@/lib/soql";
 
 export async function GET() {
   const session = await auth();
@@ -12,7 +13,7 @@ export async function GET() {
         (SELECT Id, Component__r.Name, Component__r.Type__c, Amount_Monthly__c, Amount_Annual__c, Percentage__c
          FROM Lines__r ORDER BY Component__r.Type__c, Component__r.Name)
       FROM Salary_Structure__c
-      WHERE Employee__c = '${session.user.id}'
+      WHERE Employee__c = '${assertSalesforceId(session.user.id)}'
       ORDER BY Effective_From__c DESC
       LIMIT 5
     `);

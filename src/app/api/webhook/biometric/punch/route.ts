@@ -49,7 +49,8 @@ export async function POST(req: NextRequest) {
   //
   // // Map device employee code to Salesforce Employee__c
   // const employee = await queryOneOrNull<SFEmployee>(
-  //   `SELECT Id FROM Employee__c WHERE Employee_Code__c = '${employeeCode}' LIMIT 1`
+  //   `SELECT Id FROM Employee__c WHERE Employee_Code__c = '${escapeSoqlString(employeeCode)}' LIMIT 1`
+  //   // employeeCode arrives from the device payload: always escape it, never interpolate raw.
   // );
   // if (!employee) {
   //   return NextResponse.json(

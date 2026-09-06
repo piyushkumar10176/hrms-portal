@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>Closing_Non_Negative</fullName>
-    <active>true</active>
+    <active>false</active>
     <errorConditionFormula>Closing_Balance__c &lt; 0</errorConditionFormula>
     <errorMessage>Closing balance cannot be negative.</errorMessage>
+    <description>Deactivated. Closing_Balance__c is derived by LeaveRequestTriggerHandler; a negative value means over-availed leave, not a bad write. Blocking it stops the balance update and therefore every leave request. Sufficiency is enforced at request time.</description>
 </ValidationRule>

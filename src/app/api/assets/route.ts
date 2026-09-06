@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
+import { assertSalesforceId } from "@/lib/soql";
 
 export async function GET() {
   const session = await auth();
@@ -11,7 +12,7 @@ export async function GET() {
       SELECT Id, Name, Asset_Tag__c, Type__c, Status__c, Serial_Number__c,
              Purchase_Date__c, Purchase_Value__c
       FROM Asset__c
-      WHERE Assigned_To__c = '${session.user.id}'
+      WHERE Assigned_To__c = '${assertSalesforceId(session.user.id)}'
       ORDER BY Name ASC
     `);
     return NextResponse.json({ assets });

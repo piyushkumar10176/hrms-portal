@@ -11,6 +11,7 @@
 
 import { getSalesforceConnection } from "./salesforce";
 import { queryOne } from "./salesforce";
+import { assertSalesforceId } from "./soql";
 
 // ============================================
 // Types
@@ -141,7 +142,7 @@ export async function notifyManagerOnLeaveApplication(
     const manager = await queryOne<{ Official_Email__c: string; First_Name__c: string; Name: string }>(
       `SELECT Official_Email__c, First_Name__c, Name 
        FROM Employee__c 
-       WHERE Id = '${data.managerId}' LIMIT 1`
+       WHERE Id = '${assertSalesforceId(data.managerId)}' LIMIT 1`
     );
     managerEmail = manager.Official_Email__c;
     managerName = manager.First_Name__c || manager.Name;
@@ -188,7 +189,7 @@ export async function notifyEmployeeOnLeaveDecision(
 
   try {
     const employee = await queryOne<{ Official_Email__c: string; First_Name__c: string }>(
-      `SELECT Official_Email__c, First_Name__c FROM Employee__c WHERE Id = '${employeeId}' LIMIT 1`
+      `SELECT Official_Email__c, First_Name__c FROM Employee__c WHERE Id = '${assertSalesforceId(employeeId)}' LIMIT 1`
     );
     employeeEmail = employee.Official_Email__c;
 

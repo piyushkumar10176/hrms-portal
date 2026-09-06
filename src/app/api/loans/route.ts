@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
+import { assertSalesforceId } from "@/lib/soql";
 
 export async function GET() {
   const session = await auth();
@@ -12,7 +13,7 @@ export async function GET() {
              EMI__c, Outstanding__c, Start_Date__c, End_Date__c, Status__c,
         (SELECT Id, Amount__c, Date__c FROM Repayments__r ORDER BY Date__c DESC LIMIT 12)
       FROM Loan__c
-      WHERE Employee__c = '${session.user.id}'
+      WHERE Employee__c = '${assertSalesforceId(session.user.id)}'
       ORDER BY Start_Date__c DESC
     `);
     return NextResponse.json({ loans });

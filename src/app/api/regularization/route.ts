@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
+import { assertSalesforceId } from "@/lib/soql";
 
 // GET: Fetch regularization requests for the logged-in employee
 export async function GET() {
@@ -12,7 +13,7 @@ export async function GET() {
       SELECT Id, Date__c, Requested_Clock_In__c, Requested_Clock_Out__c,
              Reason__c, Status__c, Approver__r.Name, CreatedDate
       FROM Regularization_Request__c
-      WHERE Employee__c = '${session.user.id}'
+      WHERE Employee__c = '${assertSalesforceId(session.user.id)}'
       ORDER BY CreatedDate DESC
       LIMIT 50
     `);
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
 
     // Get the employee's reporting manager for approver
     const employees = await query<any>(`
-      SELECT Id, Reporting_Manager__c FROM Employee__c WHERE Id = '${session.user.id}'
+      SELECT Id, Reporting_Manager__c FROM Employee__c WHERE Id = '${assertSalesforceId(session.user.id)}'
     `);
     const emp = employees[0];
 

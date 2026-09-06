@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEmployeeByEmail } from "@/lib/salesforce-queries";
 import { getSalesforceConnection } from "@/lib/salesforce";
+import { assertSalesforceId } from "@/lib/soql";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function GET() {
     const query = `
       SELECT Id, Message__c, Is_Read__c, Type__c, CreatedDate
       FROM Notification__c
-      WHERE Employee__c = '${sfEmp.Id}'
+      WHERE Employee__c = '${assertSalesforceId(sfEmp.Id)}'
       ORDER BY CreatedDate DESC
       LIMIT 20
     `;
@@ -34,8 +35,13 @@ export async function GET() {
 
     return NextResponse.json({ notifications, unreadCount, source: "salesforce" });
   } catch (err) {
+    // Previously this returned an empty list, so a broken query left the bell
+    // permanently empty with no signal to anyone. Surface it instead.
     console.error("Salesforce getNotifications error:", err);
-    return NextResponse.json({ notifications: [], unreadCount: 0, source: "salesforce" });
+    return NextResponse.json(
+      { error: "Failed to load notifications", notifications: [], unreadCount: 0 },
+      { status: 500 }
+    );
   }
 }
 
@@ -49,7 +55,7 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     if (body.action === "markAllRead") {
-      const query = `SELECT Id FROM Notification__c WHERE Employee__c = '${sfEmp.Id}' AND Is_Read__c = false`;
+      const query = `SELECT Id FROM Notification__c WHERE Employee__c = '${assertSalesforceId(sfEmp.Id)}' AND Is_Read__c = false`;
       const unread = (await conn.query(query)).records as any[];
       if (unread.length > 0) {
         const toUpdate = unread.map(r => ({ Id: r.Id, Is_Read__c: true }));
