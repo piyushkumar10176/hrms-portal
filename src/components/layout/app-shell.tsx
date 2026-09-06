@@ -13,6 +13,7 @@ const NAV_ITEMS = [
       { label: "Attendance", href: "/attendance" },
       { label: "Leave", href: "/leave" },
       { label: "Clock In/Out", href: "/attendance/clock" },
+      { label: "Holidays", href: "/holidays" },
       { label: "Profile", href: "/profile" },
     ]
   },

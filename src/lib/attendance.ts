@@ -47,8 +47,16 @@ export interface DaySummary {
   breakMinutes: number;
   /** True while the employee is clocked in with no matching clock-out. */
   onTheClock: boolean;
-  /** Set while a break is open, so "away since 13:00" can be shown. */
-  breakOpenSince: string | null;
+  /**
+   * The clock-out that has not yet been followed by a clock-in.
+   *
+   * Deliberately NOT called "on a break". Nothing in the data distinguishes
+   * stepping out for coffee from going home for the day; the difference only
+   * appears if a later clock-in arrives. Callers must therefore describe this
+   * as "clocked out", never as an open break, or someone who has finished at
+   * 19:00 is told they are on a break and invited to come back from it.
+   */
+  awaySince: string | null;
   breakOverAllowance: boolean;
   log: PunchLogEntry[];
 }
@@ -102,7 +110,7 @@ export function summarizeDay(punches: PunchLike[]): DaySummary {
     effectiveHours: null,
     breakMinutes: 0,
     onTheClock: false,
-    breakOpenSince: null,
+    awaySince: null,
     breakOverAllowance: false,
     log: [],
   };
@@ -186,7 +194,7 @@ export function summarizeDay(punches: PunchLike[]): DaySummary {
     effectiveHours,
     breakMinutes,
     onTheClock: lastWasCheckIn,
-    breakOpenSince: openBreakStart ? punchTime(openBreakStart) : null,
+    awaySince: openBreakStart ? punchTime(openBreakStart) : null,
     breakOverAllowance: breakMinutes > BREAK_ALLOWANCE_MINUTES,
     log,
   };

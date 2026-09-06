@@ -360,12 +360,15 @@ function todayBlocks(day: DaySummary): object[] {
     `*Break*\n${formatMinutes(day.breakMinutes)} of ${formatMinutes(BREAK_ALLOWANCE_MINUTES)}` +
       (day.breakOverAllowance ? "  :warning:" : ""),
     `*On premises*\n${formatHours(day.grossHours)}`,
+    // "Clocked out" rather than "on break": the punches cannot tell a coffee
+    // break from going home, and guessing told anyone who had finished for the
+    // day that they were on a break.
     `*Status*\n${
       day.onTheClock
-        ? "On the clock"
-        : day.breakOpenSince
-          ? `On break since ${day.breakOpenSince}`
-          : "Clocked out"
+        ? `On the clock since ${day.clockIn}`
+        : day.awaySince
+          ? `Clocked out at ${day.awaySince}`
+          : "Not clocked in"
     }`,
   ];
 

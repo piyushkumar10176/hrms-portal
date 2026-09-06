@@ -106,7 +106,7 @@ export interface SFLeaveRequest {
   Id: string;
   Name?: string;
   Employee__c: string;
-  Employee__r?: { Name: string; Official_Email__c: string; Photograph__c?: string };
+  Employee__r?: { Name: string; Official_Email__c: string; Photograph__c?: string; Department__c?: string };
   Leave_Type__c: string;
   Leave_Type__r?: { Name: string; Code__c: string };
   From_Date__c: string;
@@ -490,6 +490,27 @@ export async function getPendingReimbursementApprovals(managerEmployeeId: string
 /**
  * Get team leave calendar (approved leaves for a manager's team).
  */
+/**
+ * Everyone on approved leave today, company-wide.
+ *
+ * The dashboard needs this to tell who is away from who is working from home.
+ * getTeamLeaveCalendar only covers one manager's reports, so it cannot answer
+ * "is anyone remote today" for someone with no reports.
+ */
+export async function getWhoIsOutToday(): Promise<SFLeaveRequest[]> {
+  const today = businessToday();
+  return query<SFLeaveRequest>(`
+    SELECT Id, Employee__c, Employee__r.Name, Employee__r.Department__c,
+           Leave_Type__r.Name, Leave_Type__r.Code__c,
+           From_Date__c, To_Date__c, Days__c, Half_Day__c, Status__c
+    FROM Leave_Request__c
+    WHERE Status__c = 'Approved'
+      AND From_Date__c <= ${today}
+      AND To_Date__c >= ${today}
+    ORDER BY Employee__r.Name
+  `);
+}
+
 export async function getTeamLeaveCalendar(
   managerEmployeeId: string,
   startDate: string,

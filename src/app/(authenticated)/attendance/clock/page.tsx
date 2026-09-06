@@ -47,23 +47,23 @@ export default function ClockPage() {
   };
 
   const onTheClock = today?.onTheClock ?? false;
-  const onBreak = !onTheClock && !!today?.breakOpenSince;
 
+  // Nothing in the punches says whether a clock-out was a coffee break or the
+  // end of the day, so the page states the fact and lets the employee decide.
+  // It used to guess "on break", which meant anyone who finished at 19:00 was
+  // told they were on a break and offered a "Back from Break" button, and never
+  // saw the hours they had worked.
   const statusLabel = !today
     ? "Not clocked in yet"
     : onTheClock
       ? `Working since ${today.clockIn}`
-      : onBreak
-        ? `On break since ${today.breakOpenSince}`
-        : `Clocked out at ${today.clockOut} — ${formatHours(today.effectiveHours)} effective`;
+      : `Clocked out at ${today.clockOut} — ${formatHours(today.effectiveHours)} worked so far`;
 
   const statusDot = !today
     ? "bg-orange-400"
     : onTheClock
       ? "bg-green-500 animate-pulse"
-      : onBreak
-        ? "bg-amber-500 animate-pulse"
-        : "bg-gray-400";
+      : "bg-gray-400";
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -98,7 +98,7 @@ export default function ClockPage() {
         <div className="flex gap-4">
           <button onClick={() => handlePunch("clockIn")} disabled={loading || onTheClock}
             className="flex-1 py-4 rounded-xl font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-lg">
-            🕐 {onBreak ? "Back from Break" : "Clock In"}
+            🕐 Clock In
           </button>
           <button onClick={() => handlePunch("clockOut")} disabled={loading || !onTheClock}
             className="flex-1 py-4 rounded-xl font-semibold text-white bg-rose-500 hover:bg-rose-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors text-lg">

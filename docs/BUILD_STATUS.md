@@ -67,6 +67,10 @@ Each of these has been exercised end to end.
 | Reporting lines | Portal | Manager on each employee; org chart page reads it |
 | Employee directory and profiles | Portal | |
 | Edit own profile | Portal | |
+| Holiday calendar page | Portal | Upcoming and past, with a countdown |
+| Upcoming birthdays | Portal | Works; 22 of 28 have a date of birth, all seeded |
+| Work anniversaries | Portal | Derived from joining date, which all 28 have |
+| Who is on leave and who is remote today | Portal | Read from approved leave, company-wide |
 
 ### Security and access
 
@@ -175,6 +179,8 @@ it or removing the line, it should not ship as it stands.
 | Shifts and rosters | `Shift__c` and `Shift_Assignment__c` are empty; attendance falls back to defaults for everyone |
 | Overtime | Not modelled |
 | GPS capture and geo-fencing | Fields, API and office coordinates all exist; nothing captures a location |
+| Tax declaration submission | The screen shows a declaration; there is no way to create, edit or submit one, and no proof upload |
+| New joiner count on the dashboard | Removed rather than left showing a hardcoded zero |
 | Comp-off earning | Leave type exists; nothing grants it |
 | Leave accrual over time | Balances are set, not accrued monthly |
 | Leave carry-forward and encashment | Not modelled |

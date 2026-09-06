@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useClock } from "@/hooks/use-clock";
+import { formatHours, type DaySummary } from "@/lib/attendance";
 
 interface ReportBalance {
   leaveType: string;
@@ -23,16 +24,33 @@ interface DirectReportLeave {
   balances: ReportBalance[];
 }
 
+interface Celebration {
+  employee: { firstName: string; lastName: string; department: string };
+  daysAway: number;
+  /** Years completed, on a work anniversary only. */
+  years?: number;
+}
+
+interface Away {
+  id: string;
+  name: string;
+  department: string;
+  leaveType: string;
+  halfDay: boolean;
+}
+
 export default function DashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
   const time = useClock();
-  const [todayAttendance, setTodayAttendance] = useState<{ clockIn: string | null; clockOut: string | null; status: string } | null>(null);
+  const [todayAttendance, setTodayAttendance] = useState<DaySummary | null>(null);
   const [leaveBalances, setLeaveBalances] = useState<{ leaveType: string; code: string; available: number; total: number; used: number; color: string }[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [monthlyStats, setMonthlyStats] = useState({ present: 0, total: 0 });
   const [holidays, setHolidays] = useState<{ name: string; date: string }[]>([]);
-  const [birthdays, setBirthdays] = useState<{ employee: { firstName: string; lastName: string; department: string }; daysAway: number }[]>([]);
+  const [birthdays, setBirthdays] = useState<Celebration[]>([]);
+  const [anniversaries, setAnniversaries] = useState<Celebration[]>([]);
+  const [workingRemotely, setWorkingRemotely] = useState<Away[]>([]);
   const [teamOnLeave, setTeamOnLeave] = useState<{ name: string; leaveType: string; fromDate?: string; toDate?: string }[]>([]);
   const [directReportsLeaves, setDirectReportsLeaves] = useState<DirectReportLeave[]>([]);
 
@@ -51,6 +69,8 @@ export default function DashboardPage() {
       setHolidays((hol.holidays || []).filter((h: { date: string }) => new Date(h.date) >= new Date()).slice(0, 3));
       setPendingCount((approvals.approvals || []).length);
       setBirthdays(dash.birthdays || []);
+      setAnniversaries(dash.anniversaries || []);
+      setWorkingRemotely(dash.workingRemotely || []);
       setTeamOnLeave(dash.teamOnLeave || []);
       setDirectReportsLeaves(dash.directReportsLeaves || []);
     }).catch(() => {});
@@ -104,7 +124,7 @@ export default function DashboardPage() {
           <div className="bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl p-4 text-white relative overflow-hidden">
             <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold text-sm">🎌 Holidays</h3>
-              <Link href="/attendance" className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full hover:bg-white/30 transition">View All</Link>
+              <Link href="/holidays" className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full hover:bg-white/30 transition">View All</Link>
             </div>
             {holidays.length > 0 ? (
               <div className="mt-2">
@@ -139,16 +159,32 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* Working Remotely */}
+          {/* Working Remotely. This used to state "Everyone is at office!" as a
+              fixed string, whatever the approved work-from-home leave said. */}
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <h3 className="font-semibold text-gray-900 text-sm mb-2">Working Remotely</h3>
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">🏢</span>
-              <div>
-                <p className="text-sm font-medium text-gray-800">Everyone is at office!</p>
-                <p className="text-xs text-gray-500">No one is working remotely today.</p>
+            {workingRemotely.length > 0 ? (
+              <div className="space-y-2">
+                {workingRemotely.slice(0, 3).map((w, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-sky-100 flex items-center justify-center text-[10px] font-bold text-sky-600">{w.name[0]}</div>
+                    <span className="text-xs text-gray-700 truncate">{w.name}</span>
+                    {w.halfDay && <span className="text-[10px] text-gray-400 ml-auto shrink-0">half day</span>}
+                  </div>
+                ))}
+                {workingRemotely.length > 3 && (
+                  <p className="text-[11px] text-gray-400">and {workingRemotely.length - 3} more</p>
+                )}
               </div>
-            </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">🏢</span>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Nobody is remote today</p>
+                  <p className="text-xs text-gray-500">No approved work from home for today.</p>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Time + Web Clock-In */}
@@ -169,8 +205,17 @@ export default function DashboardPage() {
               <button onClick={handleClockIn} className="mt-3 bg-white/20 hover:bg-white/30 border border-white/30 px-4 py-1.5 rounded-lg text-sm font-medium transition-colors w-full">
                 Web Clock-In
               </button>
+            ) : todayAttendance.onTheClock ? (
+              <p className="text-xs opacity-70 mt-3">
+                On the clock since {todayAttendance.clockIn}
+                {todayAttendance.breakMinutes > 0 && ` · ${todayAttendance.breakMinutes}m break`}
+              </p>
             ) : (
-              <p className="text-xs opacity-60 mt-3">Clocked in at {todayAttendance.clockIn}</p>
+              <p className="text-xs opacity-70 mt-3">
+                {todayAttendance.clockIn} → {todayAttendance.clockOut}
+                {" · "}{formatHours(todayAttendance.effectiveHours)} worked
+                {todayAttendance.breakMinutes > 0 && ` · ${todayAttendance.breakMinutes}m break`}
+              </p>
             )}
           </div>
 
@@ -232,8 +277,8 @@ export default function DashboardPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-4">
             <div className="flex items-center gap-6 text-sm text-gray-600">
               <span className="flex items-center gap-1.5">🎂 <strong>{birthdays.length}</strong> Birthdays</span>
-              <span className="flex items-center gap-1.5">🎉 0 Work Anniversaries</span>
-              <span className="flex items-center gap-1.5">👤 0 New Joinees</span>
+              <span className="flex items-center gap-1.5">🎉 <strong>{anniversaries.length}</strong> Work Anniversaries</span>
+              <span className="text-xs text-gray-400">next 30 days</span>
             </div>
           </div>
 
@@ -284,6 +329,37 @@ export default function DashboardPage() {
                 <p className="text-sm text-gray-400 text-center py-6">No upcoming birthdays this month</p>
               )}
             </div>
+          </div>
+
+          {/* Work Anniversaries. Derived from the joining date, which every
+              employee has, so this fills in even where dates of birth do not. */}
+          <div className="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 className="font-semibold text-gray-900 mb-4">🎉 Work Anniversaries</h3>
+            {anniversaries.length > 0 ? (
+              <div className="space-y-3">
+                {anniversaries.slice(0, 5).map((a, i) => (
+                  <div key={i} className={`flex items-center gap-3 p-3 rounded-lg ${a.daysAway === 0 ? "bg-gradient-to-r from-amber-50 to-orange-50" : "hover:bg-gray-50"}`}>
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                      {a.employee.firstName[0]}{a.employee.lastName?.[0] || ""}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {a.employee.firstName} {a.employee.lastName}
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        {a.years} {a.years === 1 ? "year" : "years"}
+                        {a.employee.department && ` · ${a.employee.department}`}
+                      </p>
+                    </div>
+                    <span className={`ml-auto shrink-0 text-xs px-2 py-1 rounded-full font-medium ${a.daysAway === 0 ? "bg-amber-100 text-amber-700" : "text-gray-400"}`}>
+                      {a.daysAway === 0 ? "🎊 Today!" : a.daysAway === 1 ? "Tomorrow" : `${a.daysAway} days away`}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 text-center py-6">No work anniversaries in the next 30 days</p>
+            )}
           </div>
 
           {/* Upcoming Holidays */}
