@@ -1,146 +1,647 @@
-# CloudSheer HRMS build reference
+# CloudSheer HRMS
 
-Salesforce holds the record. Slack is where people do the work. This describes
-what exists, how data moves through it, and what remains before it displaces
-Keka for the employee-facing half.
+Complete guide to the system: what it is, how the data fits together, what each
+person can and cannot do, and how a normal working day runs through it.
 
-Compiled 6 September 2026 from the live org and this repository. Record counts
-and test figures were read at that time and drift as the system is used.
+Salesforce holds the record. Slack is where people do the work. The web portal
+still exists for administration.
 
-- 29 employees, 34 custom objects
-- 104 Apex tests, 86% org-wide coverage
-- 6 Slack slash commands
+Compiled 6 September 2026 from the live org and this repository. Counts drift as
+the system is used.
+
+| | |
+|---|---|
+| Employees | 28 active, 1 inactive system account |
+| Custom objects | 34 deployed, 12 still empty |
+| Apex tests | 104 passing, 86% org-wide coverage |
+| Slack commands | 9 across 6 registrations |
 
 ---
 
-## 1. The shape of it
+## Contents
 
-Two layers, frequently confused, doing unrelated jobs.
+1. [Architecture](#1-architecture)
+2. [The data model](#2-the-data-model)
+3. [Who can do what](#3-who-can-do-what)
+4. [What nobody can do yet](#4-what-nobody-can-do-yet)
+5. [A day in the system](#5-a-day-in-the-system)
+6. [Punching in and out, in detail](#6-punching-in-and-out-in-detail)
+7. [Applying for leave, in detail](#7-applying-for-leave-in-detail)
+8. [Regularization, in detail](#8-regularization-in-detail)
+9. [Why Slack, and how it is shaped](#9-why-slack-and-how-it-is-shaped)
+10. [Automation reference](#10-automation-reference)
+11. [Configuration reference](#11-configuration-reference)
+12. [Biometric integration](#12-biometric-integration)
+13. [What Keka still does](#13-what-keka-still-does)
+14. [Operating notes](#14-operating-notes)
+
+---
+
+## 1. Architecture
+
+Three pieces, with a clear division of responsibility.
+
+```
+   People                Surfaces                    System of record
+   ------                --------                    ----------------
+
+   Employee   ------->   Slack app        \
+   Manager    ------->   (9 commands)      \
+   HR         ------->                      >---->   Salesforce
+                                           /         - all data
+   Admin      ------->   Web portal       /          - all business rules
+                         (20 pages)                  - all automation
+
+                              ^
+                              |
+                    Next.js gateway on Vercel
+                    verifies, routes, never decides
+```
 
 **Salesforce is the system of record.** Every employee, leave request, balance,
-punch and attendance day lives there. All business rules are enforced in Apex:
-balance arithmetic, working-day counts, attendance penalties, the regularization
-cap, approval authority.
+punch, attendance day and notification lives there. Every business rule is
+enforced in Apex: balance arithmetic, working-day counting, attendance
+penalties, the regularization cap, who may approve what.
 
 **The Next.js app is a gateway, not a brain.** It verifies Slack's request
-signature, answers inside Slack's three-second deadline, and asks Salesforce to
-do the work. It holds no business rules. It lives on Vercel because that
-deadline is unforgiving and a Salesforce Site guest-user endpoint would add
-cold-start latency and a public attack surface on the org itself.
+signature, answers within Slack's three-second deadline, and asks Salesforce to
+do the work. It contains no business rules. It also still serves the web portal.
 
-The web portal still exists and still works. It is no longer the only way in,
-and for day-to-day employee tasks it is no longer the primary one.
+**Slack is the primary surface for employees and managers.** The web portal
+remains for administration and for anything that needs a real screen.
 
-> **Why the portal cannot simply be deleted.** Something must receive Slack's
-> interactivity payloads over HTTPS within three seconds. Even if every screen
-> were retired, the gateway routes would remain. What can go is the UI, not the
-> service.
+### Why the gateway is not in Apex
 
----
+Slack requires an HTTP 200 within three seconds of any interaction. A Salesforce
+Site guest-user endpoint adds cold-start latency and puts a public attack
+surface directly on the org. Vercel answers fast and holds no data. Business
+logic stays in Salesforce regardless.
 
-## 2. How a leave request moves
+### Why the portal cannot simply be deleted
 
-```
-  Slack                Gateway (Vercel)          Salesforce
-  ---------            ------------------        --------------------------
-  /myleave apply  -->  verify HMAC signature -->  working days, minus
-  modal: type,         reject if > 5 min old      weekends and holidays
-  dates, reason        map Slack id to            balance sufficiency
-                       Employee__c                overlap check
-                       ack within 3 seconds       insert Leave_Request__c
-                                                  trigger recalculates balance
-                                                          |
-                                                          v
-  Slack, back out  <-------------------------  Queueable + Named Credential
-  DM to approver                               chat.postMessage
-  post to #hrms with buttons
-
-  Also written in the same transaction:
-  Notification__c, Leave_Balance__c, HistoryRecord__c  (visible in the portal)
-```
-
-Every rule is enforced in Salesforce. The gateway validates *who is asking*,
-never *what they may do*.
-
-Approval runs the same way in reverse. A click on **Approve** reaches the
-gateway, which re-reads the record and refuses unless the clicker is the named
-approver on it. The buttons are a convenience; they are not the authorisation
-boundary. Once a decision lands, the original message is rewritten without its
-buttons and a line is appended naming who decided.
+Something must receive Slack's interactivity payloads over HTTPS inside that
+three-second window. Even if every screen were retired, the gateway routes
+remain. What can go is the UI, not the service.
 
 ---
 
-## 3. Slack commands
+## 2. The data model
 
-App `A0BVCALTXBK` in the `Cloudsheer HRMS` sandbox (`E0C001VB7JQ`). Every
-command hits `/api/slack/commands`.
+### The spine
 
-| Command | What it does |
+Everything hangs off `Employee__c`. It is not a Salesforce `User`: employees
+authenticate against `Password_Hash__c` on their own record, so the org needs no
+per-employee licence.
+
+```
+                          Department__c <----- Designation__c
+                               ^ Head__c            ^
+                               |                    |
+                               |  Department_Ref__c |  Designation_Ref__c
+                               +-------- Employee__c --------+
+                                          |  ^  |
+                    Reporting_Manager__c   |  |  |   Work_Location__c
+                    (self-lookup, the      +--+  +-----> Location__c
+                     whole org chart)
+```
+
+`Reporting_Manager__c` is a self-lookup on `Employee__c`. It is the entire org
+chart and the source of approval routing. Nothing is hardcoded.
+
+### Leave
+
+```
+   Leave_Type__c ------+                    Holiday__c
+   (5 types, quotas)   |                    (public holidays,
+                       |                     excluded from day counts)
+                       v
+   Employee__c ---> Leave_Balance__c        one row per employee,
+                    (opening, accrued,      per leave type, per year
+                     availed, closing)
+        |
+        |            Leave_Request__c
+        +----------> Employee__c    (who is asking)
+                     Approver__c    (who decides; set from Reporting_Manager__c)
+                     Leave_Type__c
+                     From/To/Days   (days derived on the server)
+                     Status__c      Submitted -> Approved | Rejected | Cancelled
+```
+
+`Leave_Balance__c` is maintained by a trigger, never by hand:
+
+```
+Availed__c        = SUM(Days__c) of all Submitted and Approved requests
+                    for that employee and leave type
+Closing_Balance__c = Opening_Balance__c + Accrued__c - Availed__c
+```
+
+### Attendance
+
+```
+   Attendance_Punch__c          raw events, one row per punch
+   Employee__c                  from Slack, the web portal, or a device
+   Punch_DateTime__c
+   Punch_Type__c                Check-In | Check-Out
+   Source__c                    Web | Slack | Mobile | Biometric
+            |
+            |  AttendancePunchTrigger -> AttendanceRollupService
+            v
+   Attendance__c                one derived row per employee per day
+   Date__c                      bucketed in the business time zone
+   Check_In__c                  earliest check-in that day
+   Check_Out__c                 latest check-out that day
+   Total_Hours__c               span between them
+   Late_By_Minutes__c           against shift start plus grace
+   Status__c                    Present | Half Day | Absent | Holiday | Week Off
+   Penalty__c                   derived, see the policy below
+   Penalty_Reason__c
+            |
+            v
+   Regularization_Request__c    a correction, capped at 3 per month
+   Employee__c, Approver__c, Date__c
+   Requested_Clock_In__c, Requested_Clock_Out__c
+   Status__c                    Submitted -> Approved | Rejected
+```
+
+Punches are the source of truth. `Attendance__c` is entirely derived and is
+recomputed whenever the punches for that day change. Nothing about a day is
+sticky: correct a punch and the hours, status and penalty all follow.
+
+### Everything else
+
+`Notification__c` is the in-app feed the portal reads, written by triggers.
+`HistoryRecord__c` is a per-employee timeline, master-detail so it dies with the
+employee. `Payslip__c`, `Employee_Salary_Structure__c` and `Tax_Declaration__c`
+carry payroll data and are out of scope, but they **block employee deletion**,
+which matters when off-boarding.
+
+Twelve objects are deployed but empty: assets, audit log, employee documents,
+expense reports, loans, onboarding tasks, salary structures, separations,
+shifts, shift assignments, reimbursements, payslip lines.
+
+---
+
+## 3. Who can do what
+
+Three roles. There is no formal role hierarchy in Salesforce; the model is
+`Employee__c.Role__c` (Employee or Admin) plus the `Reporting_Manager__c` chain.
+
+### Every employee
+
+**In Slack**
+
+| Can | How |
 |---|---|
-| `/myleave balance` | Days remaining per leave type, with a button to apply |
-| `/myleave apply` | Opens the leave modal. Days are counted server-side |
-| `/myleave status` | Your recent requests and where each one stands |
-| `/attendance in \| out` | Punch, with sequence checks so you cannot clock in twice |
-| `/attendance today` | Today's punches |
-| `/approvals` | Leave and regularizations awaiting your decision |
-| `/whosout` | Who is on approved leave today |
-| `/regularize` | This month's penalised days and remaining allowance |
-| `/hrdash` | Who is out, leave counts by status, penalties this month |
+| See their leave balance | `/myleave balance` |
+| Apply for leave | `/myleave apply`, or the button on the balance |
+| See their own requests and status | `/myleave status` |
+| Clock in and out | `/attendance in`, `/attendance out` |
+| See today's punches | `/attendance today` |
+| See who is out today | `/whosout` |
+| See their penalised days and allowance | `/regularize` |
+| Raise a regularization | button inside `/regularize` |
+| See the daily digest | posted to `#hrms` at 09:00 IST |
 
-`/leave` is reserved by Slack for leaving a channel and cannot be registered,
-which is why the command is `/myleave`.
+**In the portal**: dashboard, own profile, own documents, attendance calendar,
+leave history, payslips, expenses, loans, the org chart.
 
-**Daily digest.** A scheduled job posts to `#hrms` (`C0BVCBYSEJV`) at 09:00 IST
-on weekdays: who is on approved leave, any holiday falling that day, and
-everything still awaiting a decision. Nobody has to ask for it.
+**Cannot**: see anyone else's balance, payslip, bank details or documents;
+approve anything, including their own request; change their own leave after
+submitting; alter attendance directly.
+
+### Manager
+
+Everything an employee can do, plus:
+
+| Can | How |
+|---|---|
+| See requests awaiting them | `/approvals` |
+| Approve or reject leave | buttons in `/approvals` or on the `#hrms` post |
+| Approve or reject regularizations | same place |
+| See their team's leave balances | portal dashboard |
+| See who on the team is out | `/whosout`, `/hrdash` |
+
+A manager is anyone named as `Approver__c` on a request, which is set from the
+requester's `Reporting_Manager__c`. There is no separate manager flag.
+
+**Cannot**: approve a request where they are not the named approver; approve
+their own; decide a request already settled; see team members' bank details,
+PAN or Aadhaar.
+
+### HR
+
+Currently HR is an employee whose `Department__c` is `HR`. HR has no special
+approval power **unless the override is switched on**.
+
+| Can | How |
+|---|---|
+| See every leave request in `#hrms` | channel post on every submission |
+| See the daily digest | 09:00 IST |
+| See the whole-company dashboard | `/hrdash` |
+| See who is out | `/whosout` |
+| Approve anything | only if `HR_Can_Approve__c` is on |
+
+`/hrdash` returns who is out today, leave requests by status for the year, and
+attendance penalties this month grouped by person.
+
+### Admin
+
+`Role__c = Admin`. Adds the portal's admin pages: employees, departments,
+designations, salary, assets, onboarding templates. Admin is the only role that
+can create or edit employee records, and the only one besides the employee
+themselves who can see bank details, PAN, Aadhaar and date of birth.
+
+### The authorisation rules, precisely
+
+These are enforced in Salesforce and in the gateway, not in the UI:
+
+1. Sensitive personal fields are returned only to the employee themselves or an
+   admin. Everyone else gets the colleague-visible subset.
+2. Only the `Approver__c` named on a request may decide it. HR may too, but only
+   when `HR_Can_Approve__c` is on.
+3. Nobody may approve their own request. This holds even for HR override.
+4. A request that is not `Submitted` cannot be decided again.
+5. Leave days are counted on the server. A client cannot supply them.
+6. The regularization cap is checked on submission, not only when the form opens.
 
 ---
 
-## 4. Attendance policy
+## 4. What nobody can do yet
 
-Every threshold is a Custom Label, so the policy changes in Setup without a code
-deploy.
+Honest list of gaps, so nobody goes looking.
 
-| Rule | Label | Value |
+**Not built at all**
+
+- Cancel or amend a leave request after submitting. The status exists; there is
+  no route to it.
+- Expenses or reimbursement claims from Slack. Objects exist, no surface.
+- Employee profile or team directory in Slack.
+- Onboarding and offboarding checklists. The trigger generates tasks from
+  templates, but no templates are defined.
+- Document upload, storage or expiry tracking.
+- Shift patterns and rosters. `Shift__c` and `Shift_Assignment__c` are empty, so
+  the rollup falls back to default hours for everyone.
+- Audit log of status changes.
+- Weekly or monthly scheduled reports. Only the daily digest exists.
+- Asset issue and return.
+- Half-day leave through Slack. The field exists and the modal does not offer it.
+
+**Deliberately out of scope**
+
+Payroll processing, salary structure design, provident fund and statutory
+compliance, payslip generation, tax filing. These stay with Keka.
+
+**Blocked by data, not code**
+
+Twenty-six of twenty-eight active employees carry `@test.com` addresses. Slack
+accounts are matched to employees by email, so only two people can currently use
+the Slack app at all. Everything works the moment the addresses are real.
+
+---
+
+## 5. A day in the system
+
+A normal weekday, in order.
+
+**09:00 IST — the digest posts.** A scheduled job writes to `#hrms`: who is on
+approved leave today, any holiday, and every request still awaiting a decision.
+Nobody has to ask.
+
+**09:20 — people arrive.** Each person runs `/attendance in`, or punches on the
+device once that is wired. A row is written to `Attendance_Punch__c`. The
+trigger immediately derives or updates that day's `Attendance__c` row.
+
+**10:40 — someone needs leave.** They run `/myleave balance`, see what is left,
+press **Apply for leave** and fill the modal. On submit, Salesforce counts the
+working days, checks the balance and checks for overlap. If it passes, the
+request is created, the balance moves, and two messages go out: a DM to the
+manager and a post to `#hrms` carrying Approve and Reject buttons.
+
+**10:41 — the manager decides.** They press **Approve** in the DM or the
+channel. The gateway re-reads the record and confirms they are the named
+approver. The status changes, the balance is recalculated, the original message
+is rewritten without its buttons and with a line saying who decided, and the
+employee gets a DM.
+
+**14:00 — someone checks the team.** `/whosout` for the quick answer, `/hrdash`
+for leave counts and this month's attendance penalties.
+
+**18:45 — people leave.** `/attendance out`. The rollup recomputes the day:
+hours worked, lateness, whether the day breaches policy.
+
+**Next morning — a penalty appears.** Someone who arrived at 11:30 or left after
+six hours sees it in `/regularize`, along with how much of their monthly
+allowance remains. They raise a regularization; it goes to their manager through
+the same approval path as leave.
+
+---
+
+## 6. Punching in and out, in detail
+
+### What a punch is
+
+A punch is an immutable event: an employee, an instant, and a direction.
+Everything else about attendance is derived from punches, never entered.
+
+### The three ways a punch arrives
+
+| Source | Route | Status |
 |---|---|---|
-| Arrival at or after this time is a penalty | `HRMS_Penalty_Arrival_Time` | 11:00 |
-| Working less than this is a penalty | `HRMS_Penalty_Minimum_Hours` | 9 |
-| Hours that count as a full day | `HRMS_Default_Full_Day_Hours` | 9 |
-| Regularizations per employee per month | `HRMS_Regularizations_Per_Month` | 3 |
-| Business time zone | `HRMS_Business_Time_Zone` | Asia/Kolkata |
+| Slack | `/attendance in` or `out` | Live |
+| Web portal | Clock page | Live |
+| Biometric device | Webhook or scheduled poll | Not yet connected |
 
-**Penalties are derived, never sticky.** They are recomputed from the punches
-every time those punches change, so correcting a punch clears the flag rather
-than leaving it stuck. Weekends and holidays are never penalised. A day still
-open because there is no check-out yet is left alone rather than judged early.
+### Sequence rules
 
-**Rejected regularizations still consume the monthly allowance.** The cap exists
-to stop regularization substituting for turning up, not to reward being refused.
-The allowance is checked when the modal opens and again on submission, because
-the button may have been drawn before the last one was used.
+A punch is refused if it does not make sense:
 
-Worked example from the seeded data, showing each branch:
+- Clocking in when the last punch today was a check-in returns *"You are already
+  clocked in."*
+- Clocking out with no punch today returns *"You have not clocked in today."*
+- Clocking out when the last punch was a check-out returns *"You are already
+  clocked out."*
+
+Without these, the rollup would derive nonsense hours from a mismatched pair.
+
+### How a day is derived
+
+When any punch for a day changes, `AttendanceRollupService` recomputes that
+whole day:
+
+1. **Bucket the punch into a business date.** Punch times are instants. The date
+   is computed in `Asia/Kolkata`, not the running user's time zone. This matters:
+   the integration user runs in `America/Los_Angeles`, and using its clock would
+   file evening punches on the wrong day.
+2. **First check-in, last check-out.** Multiple pairs in a day collapse to the
+   outer span, so a lunch break does not split the day in two.
+3. **Hours** are the span between them, to two decimals. No check-out yet means
+   hours stay empty rather than being guessed.
+4. **Lateness** is arrival minus shift start minus grace, floored at zero.
+5. **Status** is Week Off on Saturday and Sunday, Holiday if the date is in
+   `Holiday__c`, otherwise Present, Half Day or Absent by hours worked.
+6. **Penalty** is derived last, from the rules below.
+
+### The penalty rules
+
+| Breach | Threshold | Message |
+|---|---|---|
+| Late arrival | at or after 11:00 | `arrived at 11:45, at or after 11:00` |
+| Short shift | under 9 hours | `worked 6.50 of 9 hours` |
+
+Both thresholds are Custom Labels and change in Setup without a deploy. A day
+can breach both, and the reason then names both.
+
+**Never penalised**: weekends, public holidays, and any day still open because
+there is no check-out yet.
+
+**Never sticky**: penalties are recomputed from the punches every time. Correct
+a punch and the penalty clears itself.
+
+Worked examples from real data:
 
 | Day | Arrived | Hours | Outcome |
 |---|---|---|---|
 | Wed 2 Sep | 11:45 | 9.25 | Late only |
 | Thu 3 Sep | 09:30 | 6.50 | Short shift only |
-| Wed 2 Sep (other employee) | 12:10 | 4.83 | Both reasons |
+| Wed 2 Sep (other person) | 12:10 | 4.83 | Both reasons |
 | Fri 4 Sep | 09:25 | 9.42 | No penalty |
 | Sun 6 Sep | 13:02 | 1.41 | Week off, exempt |
 
 ---
 
-## 5. Biometric sync
+## 7. Applying for leave, in detail
 
-There are two ways a physical punch machine reaches Salesforce, and which one
-applies depends entirely on the device.
+### The flow
+
+1. `/myleave balance` shows days remaining per type, with an **Apply** button.
+2. The button opens a modal: leave type, from date, to date, reason. The type
+   list shows remaining days beside each name.
+3. On submit, the server checks, in order:
+   - dates parse and the start is not after the end
+   - working days in the range, excluding weekends and `Holiday__c`
+   - the range contains at least one working day
+   - no overlap with an existing Submitted or Approved request
+   - the balance covers the request
+4. If any check fails, the modal stays open with the error against the offending
+   field. Nothing is written.
+5. If all pass, `Leave_Request__c` is created with `Status__c = Submitted` and
+   `Approver__c` taken from the requester's `Reporting_Manager__c`.
+
+### What happens on creation
+
+A single trigger does four things:
+
+- Recalculates `Availed__c` and `Closing_Balance__c` for that employee and type
+- Writes a `Notification__c` for the approver, which the portal shows
+- Queues a Slack DM to the approver
+- Queues a Slack post to `#hrms` with Approve and Reject buttons
+
+Slack failures are logged and swallowed. Slack being unreachable must never stop
+someone submitting leave.
+
+### Deciding
+
+The buttons appear in two places, and both run the same checks. The gateway
+re-reads the record and refuses unless the clicker is the named approver, is not
+the requester, and the request is still `Submitted`. The buttons are a
+convenience; they are not the authorisation boundary.
+
+On a decision the original message is rewritten in place: buttons removed, a
+line appended naming who decided. On a refusal the message is untouched and only
+the clicker sees why.
+
+### Day counting
+
+Days are **always** computed on the server from the date range. The client
+cannot supply a count. Weekends and public holidays are excluded.
+
+| Range | Days | Why |
+|---|---|---|
+| Mon to Fri | 5 | full week |
+| Fri to Mon | 2 | weekend excluded |
+| Sat to Sun | 0 | refused, no working days |
+| Thu to Mon over a Friday holiday | 2 | holiday and weekend excluded |
+
+---
+
+## 8. Regularization, in detail
+
+A regularization is a request to correct a day that breached attendance policy.
+
+**The allowance is three per employee per calendar month**, set by
+`HRMS_Regularizations_Per_Month`.
+
+**Rejected requests still consume the allowance.** The cap exists to stop
+regularization substituting for turning up, not to reward being refused.
+
+`/regularize` shows the month's penalised days, how much allowance remains, and
+a button when both are non-zero. The modal offers only days that actually
+breached, so nobody regularizes a day that was fine.
+
+The allowance is checked twice: when the modal opens, and again on submission.
+The second check matters because the button may have been drawn before the third
+request was used.
+
+A future date cannot be regularized. `Regularization_Request__c` carries a
+`Past_Date_Only` validation rule enforcing it in the database, not just the UI.
+
+Approval runs through `/approvals` alongside leave, with the same rules.
+
+---
+
+## 9. Why Slack, and how it is shaped
+
+### What Slack is good at here
+
+Short transactions with few fields, where the alternative is opening a browser,
+logging in and finding a page. Clocking in, checking a balance, approving a
+request, seeing who is out. For these, Slack is genuinely better than a web form,
+not merely equivalent.
+
+Notifications are the other half. A leave request that appears in the manager's
+DM and in `#hrms` gets decided in minutes. The same request sitting in a portal
+inbox waits for someone to log in.
+
+### The constraints that shaped the design
+
+Slack's limits are not advisory. Exceeding most of them truncates silently.
+
+| Limit | Value | How the design responds |
+|---|---|---|
+| Interaction acknowledgement | 3 seconds | Ack first, work after, post the result to `response_url` |
+| `trigger_id` lifetime | 3 seconds, single use | Modals open from a button, never from a slash command |
+| `response_url` | 5 posts in 30 minutes | One reply per interaction |
+| Blocks per message | 50 | Approval lists cap at 8 of each type and say what is hidden |
+| Blocks per modal | 100 | Modals stay short |
+| Table | 100 rows, 20 columns, one per message | No tables; summaries instead |
+| Modal stack | 3 deep | Single-step modals only |
+
+### The serverless constraint
+
+The gateway runs on Vercel, and a serverless invocation is frozen the moment its
+response is sent. Background work started as a floating promise is silently
+dropped. All post-response work uses `after()` from `next/server`, which keeps
+the invocation alive until it finishes. This caused a real bug: Slack showed
+*"Working on it…"* forever, with a 200 in the logs and no error anywhere.
+
+### Security
+
+Slack authenticates itself by signing every request. The gateway verifies the
+signature before parsing anything: base string `v0:{timestamp}:{raw body}`, HMAC
+SHA256, constant-time comparison, and anything older than five minutes rejected.
+The raw body is used exactly as received, because re-serialising the JSON would
+change the digest.
+
+Slack routes are public in the proxy for precisely this reason: they carry no
+session, and the signature is the credential.
+
+### What Slack is wrong for
+
+Bulk administration across the company, interactive analytics, document
+libraries, org charts drawn as charts, browsing two years of payslips. These
+need a screen. The realistic end state is Slack for everything an employee does
+daily and a smaller web application for administration.
+
+---
+
+## 10. Automation reference
+
+### Triggers
+
+| Trigger | Object | Does |
+|---|---|---|
+| `LeaveRequestTrigger` | `Leave_Request__c` | Recalculates balances, writes notifications, queues Slack |
+| `AttendancePunchTrigger` | `Attendance_Punch__c` | Rebuilds the daily attendance row and its penalty |
+| `EmployeeTrigger` | `Employee__c` | Generates onboarding tasks from templates on hire |
+
+All are after-triggers, bulk safe, with no SOQL or DML in loops.
+
+### Services
+
+| Class | Responsibility |
+|---|---|
+| `LeaveRequestTriggerHandler` | Balance arithmetic, notification records |
+| `AttendanceRollupService` | Punches to daily attendance, penalties |
+| `RegularizationService` | Monthly allowance, penalised-day lookup |
+| `LeaveDigestService` | Builds the daily digest |
+| `SlackService` | `chat.postMessage` through the Named Credential |
+| `LeaveSlackNotifier` | Queueable that sends leave notifications |
+| `EmployeeTriggerHandler` | Onboarding task generation |
+
+### Scheduled
+
+| Job | When | Does |
+|---|---|---|
+| `DailyLeaveDigestSchedulable` | 09:00 IST, weekdays | Posts the digest to `#hrms` |
+
+The org runs `America/Los_Angeles` and Salesforce evaluates cron in org time, so
+the expression is Pacific and fires SUN-THU. It drifts an hour across US
+daylight saving. Setting the org default time zone to `Asia/Kolkata` is the
+durable fix.
+
+### Validation rules
+
+Enforced in the database, so neither surface can bypass them.
+
+| Object | Rule |
+|---|---|
+| `Employee__c` | Email required and well formed; PAN format; Aadhaar 12 digits; cannot manage self |
+| `Leave_Request__c` | Start not after end; days positive |
+| `Regularization_Request__c` | Past dates only |
+| `Loan__c` | Outstanding not above principal |
+| `Payroll_Cycle__c` | Start not after end |
+
+`Leave_Balance__c.Closing_Non_Negative` is deliberately **inactive**. The field
+is derived by the trigger, and blocking a negative value there stops the trigger
+writing at all, which blocks every leave request for that employee. Sufficiency
+is enforced when the request is made instead.
+
+---
+
+## 11. Configuration reference
+
+### Custom Labels, the attendance and leave policy
+
+| Label | Value | Meaning |
+|---|---|---|
+| `HRMS_Business_Time_Zone` | Asia/Kolkata | Time zone for all date bucketing |
+| `HRMS_Penalty_Arrival_Time` | 11:00 | Arrival at or after this is a penalty |
+| `HRMS_Penalty_Minimum_Hours` | 9 | Working less than this is a penalty |
+| `HRMS_Default_Full_Day_Hours` | 9 | Hours that count as a full day |
+| `HRMS_Default_Half_Day_Hours` | 4 | Hours that count as a half day |
+| `HRMS_Default_Shift_Start` | 09:30 | Shift start when no shift is assigned |
+| `HRMS_Default_Grace_Minutes` | 15 | Grace before lateness counts |
+| `HRMS_Regularizations_Per_Month` | 3 | Allowance per employee per month |
+
+### HRMS_Slack_Setting__mdt, the Default record
+
+| Field | Value | Meaning |
+|---|---|---|
+| `Enabled__c` | true | Master switch for all Slack sending |
+| `Named_Credential__c` | Slack_API | Where the bot token lives |
+| `Workspace_Team_Id__c` | T0BV8DT6LKG | Required for an Enterprise Grid org install |
+| `HR_Channel_Id__c` | C0BVCBYSEJV | `#hrms` |
+| `Notify_Manager__c` | true | DM the approver on a new request |
+| `Notify_HR__c` | true | Post to the HR channel |
+| `HR_Can_Approve__c` | false | HR override, off |
+
+### Secrets
+
+The Slack bot token lives in two places and nowhere else: the `Slack_API`
+external credential in Salesforce, and `SLACK_BOT_TOKEN` on Vercel. It is never
+in source control. The signing secret is `SLACK_SIGNING_SECRET` on Vercel only.
+
+---
+
+## 12. Biometric integration
+
+You have a physical punch machine. Two integration shapes exist and they share
+nothing but the destination, so the device model decides the design.
 
 ### Option A: the device pushes, in real time
 
-ZKTeco, eSSL, Biomax and Matrix devices support a push mode, usually through a
-cloud bridge such as CAMS. The device sends an HTTP POST to a URL you configure,
-as each punch happens:
+ZKTeco, eSSL, Biomax and Matrix devices support push, usually via a cloud bridge
+such as CAMS. The device POSTs to a URL you configure as each punch happens:
 
 ```json
 {
@@ -159,103 +660,51 @@ as each punch happens:
 ```
 
 The endpoint validates `AuthToken`, returns `{"status":"done"}` immediately, and
-queues the work. That last part is a hard requirement, not a nicety: the device
-will not wait.
+queues the work. Responding immediately is a hard requirement; the device will
+not wait.
 
-This repository already carries a stub at `/api/webhook/biometric/punch` built
-for exactly this shape. It validates a secret and returns a stub response; the
-processing block is written and commented out. Making it live is roughly a day:
-read the token from the body rather than a header, map `UserId` to
-`Employee_Code__c`, and write `Attendance_Punch__c`.
+This repository already has a stub at `/api/webhook/biometric/punch` built for
+this shape, with the processing block written and commented out. Making it live
+is roughly a day: read the token from the body rather than a header, map
+`UserId` to `Employee_Code__c`, and write `Attendance_Punch__c`.
 
 ### Option B: you poll the vendor
 
-Truein offers **no webhooks at all**. Its API is pull-only, and the constraints
-shape the design:
+Truein offers **no webhooks**. Pull only, with constraints that shape the design:
 
 - Bearer token from `getAccessToken`, expiring every 24 hours
 - One request per 40 seconds, per endpoint and key
 - `getPunchLog` caps at a 31-day window and 500 pairs per call
 
-That means scheduled Apex on a cursor, not a webhook. Perhaps two days including
-token refresh and pagination. Attendance would lag by the polling interval
-rather than appearing instantly.
+That means scheduled Apex on a cursor, around two days including token refresh
+and pagination, with attendance lagging by the polling interval.
 
-> **Confirm the device before anyone builds.** The two designs share nothing but
-> the destination. The existing stub assumes push, which is right for ZKTeco and
-> eSSL and wrong for Truein. Naming the exact make and model settles it in a
-> minute and saves a week.
+### Either way
 
-Either way the rest is already in place. A punch becomes `Attendance_Punch__c`;
-a trigger rolls punches into a daily `Attendance__c` row with first check-in,
-last check-out, hours, lateness and penalty; the digest and `/hrdash` read from
-that. Adding the biometric feed changes where punches come from and nothing else.
+Everything downstream already works. A punch becomes `Attendance_Punch__c`; the
+trigger derives the daily row with hours, lateness and penalty; the digest,
+`/hrdash` and `/regularize` read from that. The biometric feed changes only where
+punches originate.
 
----
-
-## 6. What is built
-
-| Capability | State | Notes |
-|---|---|---|
-| Leave: apply, balance, status | Built | Slack modal and web portal, shared rules |
-| Leave approval | Built | Named approver only; buttons clear once decided |
-| Balance arithmetic | Built | Trigger maintains availed and closing balance |
-| Working-day counting | Built | Excludes weekends and `Holiday__c` |
-| Attendance punches | Built | Slack and web; sequence validated |
-| Daily attendance rollup | Built | Time-zone explicit, idempotent |
-| Attendance penalties | Built | Late arrival and short shift, label-driven |
-| Regularization | Built | Three per month, enforced server-side |
-| Notifications to Slack | Built | Approver DM plus `#hrms` channel |
-| Daily who-is-out digest | Built | 09:00 IST weekdays |
-| Dashboard command | Built | `/hrdash`: leave, counts, penalties |
-| HR override on approvals | Off by default | A setting; manager-only until switched on |
-| Biometric feed | Stub | Endpoint exists, processing commented out |
-| Employee self-service profile | Web only | Not yet exposed in Slack |
-| Expenses and reimbursements | Schema only | Objects deployed, no records, no Slack surface |
-| Onboarding checklists | Schema only | Trigger generates tasks from templates; none defined |
+**Confirm the device make and model before anyone builds.** The existing stub
+assumes push, which is right for ZKTeco and eSSL and wrong for Truein.
 
 ---
 
-## 7. Data on the ground
-
-What the org actually holds, which matters more than what the schema permits.
-
-| Object | Records | Comment |
-|---|---|---|
-| `Employee__c` | 29 | 28 active. Only 2 mapped to Slack accounts |
-| `Leave_Balance__c` | 135 | One per employee per leave type for 2026 |
-| `Leave_Request__c` | 16 | Includes seeded demo data |
-| `Attendance_Punch__c` | 18 | Web and seeded; none from a device yet |
-| `Attendance__c` | 9 | Derived, not entered |
-| `Notification__c` | 18 | In-app feed the portal reads |
-| `Payslip__c` | 84 | Out of scope, left alone |
-| `Regularization_Request__c` | 0 | Flow is live, nobody has used it |
-
-Twelve objects remain empty: assets, audit log, employee documents, expense
-reports, loans, onboarding tasks, salary structures, separations, shifts, shift
-assignments, reimbursements and payslip lines. The schema is deployed; the
-features behind them are not in scope or not yet built.
-
-> **The constraint that limits every demo.** Twenty-six of twenty-eight active
-> employees carry `@test.com` addresses. Slack accounts are matched to employees
-> by email, so those twenty-six cannot be linked. Everything works for the two
-> real accounts and will work for the rest the moment their addresses are real.
-
----
-
-## 8. What Keka still does
+## 13. What Keka still does
 
 ### Deliberately out of scope
 
-Agreed as staying with Keka: payroll processing, salary structure design,
-provident fund and statutory compliance, payslip generation and delivery, tax
-filing. These are large builds in their own right and the regulatory surface is
-the expensive part, not the software.
+Payroll processing, salary structure design, provident fund and statutory
+compliance, payslip generation and delivery, tax filing. The regulatory surface
+is the expensive part, not the software.
 
 ### In scope, not yet built
 
 | Capability | Rough effort |
 |---|---|
+| Cancel or amend a submitted leave request | 1 day |
+| Half-day leave in the Slack modal | 1 day |
 | Expenses and reimbursement claims in Slack | 3-4 days |
 | Employee profile and team directory in Slack | 2-3 days |
 | Onboarding and offboarding checklists | 1 week |
@@ -267,30 +716,26 @@ the expensive part, not the software.
 
 ### Where Slack is the wrong surface
 
-Some of Keka's work does not belong in a message window, and forcing it there
-would cost more than it saves. Slack caps a message at 50 blocks and a modal at
-100, a table at 100 rows and 20 columns with one table per message, and a modal
-stack at three views deep. Exceeding those truncates silently.
-
-So bulk administration over the whole company, interactive analytics, document
-libraries, org charts as charts, and browsing two years of payslips all stay
-better on a screen. The realistic end state is Slack for everything an employee
-does daily, and a much smaller web application for administration and
-reporting: not the deletion of the portal, but its reduction to what only a
-screen can do.
+Bulk administration, interactive analytics, document libraries, org charts as
+charts, and browsing years of payslips all stay better on a screen. The end
+state is not the deletion of the portal but its reduction to what only a screen
+can do.
 
 ---
 
-## 9. Operating notes
+## 14. Operating notes
 
 ### Deployment
 
 - A push to `main` deploys the gateway to Vercel automatically.
 - An active scheduled job **blocks Apex deploys**. Abort the digest's cron
   trigger, deploy, reschedule.
-- Permission set metadata requires elements of the same type to be contiguous.
-  Appending field permissions after `classAccesses` produces a misleading
+- Permission set metadata requires same-type elements to be contiguous.
+  Appending field permissions after `classAccesses` gives a misleading
   "element is duplicated" error when nothing is duplicated.
+- Deleting an employee is blocked by `Employee_Salary_Structure__c`,
+  `Tax_Declaration__c` and `Payslip__c` children. Delete those, then leave
+  requests and balances, then the employee.
 
 ### Traps already hit
 
@@ -298,22 +743,23 @@ screen can do.
   compiles and still appears in the build output, but never runs, silently
   disabling every auth check in it.
 - Serverless freezes the invocation once a response is sent. Background work
-  must use `after()`, not a floating promise, or it is dropped with a 200 in the
-  logs and no error.
+  must use `after()`, not a floating promise.
 - A Named Credential needs `allowMergeFieldsInHeader` enabled, or a
   `$Credential` merge field in a header resolves to an empty token and every
   call returns `not_authed`.
-- `expr0` is a reserved SOQL alias. Supplying it explicitly fails the query.
-- Salesforce evaluates cron in the *org's* time zone. This org runs
-  America/Los_Angeles while the business runs Asia/Kolkata, so schedules drift
-  an hour across US daylight saving. Setting the org default time zone to
-  Asia/Kolkata is the durable fix.
+- `expr0` is a reserved SOQL alias and fails if supplied explicitly.
+- An Enterprise Grid org-wide app install needs explicit per-workspace access,
+  and channel-scoped API calls need `team_id`, or they return
+  `team_access_not_granted`.
+- `/leave` is reserved by Slack and cannot be registered as a command.
+- Salesforce evaluates cron in the org's time zone, not the business's.
 
 ### Open decisions
 
 - Whether HR may approve on a manager's behalf. The switch exists and is off.
 - Which biometric device, which decides push against poll.
-- Whether to change the org time zone, which affects reports and date handling
-  everywhere.
+- Whether to change the org default time zone to `Asia/Kolkata`.
 - Whether the remaining twenty-six employees get real email addresses, without
-  which they cannot be linked to Slack.
+  which they cannot use Slack at all.
+- Departments, designations and reporting managers for the six new joiners, none
+  of which the website provides.
