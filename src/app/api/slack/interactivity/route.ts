@@ -21,7 +21,7 @@ import {
 } from "@/lib/salesforce-queries";
 import { query, updateRecord, createRecord } from "@/lib/salesforce";
 import { assertSalesforceId } from "@/lib/soql";
-import { countWorkingDays } from "@/lib/leave-days";
+import { countWorkingDays, SHIFT_START, SHIFT_END, SHIFT_MIDPOINT, type HalfDaySession } from "@/lib/leave-days";
 import { availableDays } from "@/lib/leave-balance";
 import { businessToday } from "@/lib/business-time";
 
@@ -113,6 +113,26 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
 
     if (action.action_id === "open_leave_modal") {
       await openLeaveModal(payload.trigger_id ?? "", actor.Id);
+      return;
+    }
+
+    if (action.action_id === "cancel_leave") {
+      const outcome = await cancelOwnLeave(action.value ?? "", actor);
+      if (!outcome.decided) {
+        await postToResponseUrl(responseUrl, ephemeral(outcome.message));
+        return;
+      }
+      const original = payload.message?.blocks ?? [];
+      const withoutButtons = original.filter((block) => block.type !== "actions");
+      withoutButtons.push({
+        type: "context",
+        elements: [{ type: "mrkdwn", text: `:no_entry_sign: *Cancelled* by ${actor.Name}` }],
+      });
+      await postToResponseUrl(responseUrl, {
+        replace_original: true,
+        blocks: withoutButtons,
+        text: outcome.message,
+      });
       return;
     }
 
@@ -282,6 +302,39 @@ async function openLeaveModal(triggerId: string, employeeId: string): Promise<vo
           },
           {
             type: "input",
+            block_id: "duration",
+            label: { type: "plain_text", text: "Duration" },
+            element: {
+              type: "static_select",
+              action_id: "value",
+              initial_option: {
+                text: { type: "plain_text", text: "Full day" },
+                value: "full",
+              },
+              options: [
+                { text: { type: "plain_text", text: "Full day" }, value: "full" },
+                {
+                  text: { type: "plain_text", text: `Half day, first half (${SHIFT_START}-${SHIFT_MIDPOINT})` },
+                  value: "first",
+                },
+                {
+                  text: { type: "plain_text", text: `Half day, second half (${SHIFT_MIDPOINT}-${SHIFT_END})` },
+                  value: "second",
+                },
+              ],
+            },
+          },
+          {
+            type: "context",
+            elements: [
+              {
+                type: "mrkdwn",
+                text: `Shift runs ${SHIFT_START} to ${SHIFT_END}. A half day counts as 0.5 and applies to a single date.`,
+              },
+            ],
+          },
+          {
+            type: "input",
             block_id: "reason",
             optional: true,
             label: { type: "plain_text", text: "Reason" },
@@ -405,11 +458,26 @@ async function handleViewSubmission(payload: SlackInteraction): Promise<NextResp
   const fromDate = values.from_date?.value?.selected_date ?? "";
   const toDate = values.to_date?.value?.selected_date ?? "";
   const reason = values.reason?.value?.value ?? "";
+  const duration = values.duration?.value?.selected_option?.value ?? "full";
+  const isHalfDay = duration === "first" || duration === "second";
+  const session: HalfDaySession | null = duration === "first"
+    ? "First Half"
+    : duration === "second"
+      ? "Second Half"
+      : null;
 
   if (fromDate > toDate) {
     return NextResponse.json({
       response_action: "errors",
       errors: { to_date: "The end date must be on or after the start date." },
+    });
+  }
+
+  // Half of several days is meaningless, so it is refused rather than guessed at.
+  if (isHalfDay && fromDate !== toDate) {
+    return NextResponse.json({
+      response_action: "errors",
+      errors: { duration: "A half day applies to one date. Set the same date for both, or choose Full day." },
     });
   }
 
@@ -426,7 +494,7 @@ async function handleViewSubmission(payload: SlackInteraction): Promise<NextResp
     const holidayDates = new Set(
       holidays.map((h) => h.Date__c).filter((d): d is string => Boolean(d))
     );
-    const days = countWorkingDays(fromDate, toDate, holidayDates, false);
+    const days = countWorkingDays(fromDate, toDate, holidayDates, isHalfDay);
     if (days <= 0) {
       return NextResponse.json({
         response_action: "errors",
@@ -450,7 +518,8 @@ async function handleViewSubmission(payload: SlackInteraction): Promise<NextResp
       From_Date__c: fromDate,
       To_Date__c: toDate,
       Days__c: days,
-      Half_Day__c: false,
+      Half_Day__c: isHalfDay,
+      Half_Day_Session__c: session,
       Reason__c: reason,
       Status__c: "Submitted",
       Approver__c: actor.Reporting_Manager__c,
@@ -523,4 +592,59 @@ async function handleRegularizeSubmission(payload: SlackInteraction): Promise<Ne
       errors: { on_date: "Could not save that in Salesforce. Please try again." },
     });
   }
+}
+
+/**
+ * Cancels the requester's own leave, before or after approval.
+ *
+ * Only the person who asked may cancel, and only while the leave has not wholly
+ * passed. The balance needs no adjustment here: Cancelled is not one of the
+ * statuses that consume leave, so the trigger restores the days on its own.
+ */
+async function cancelOwnLeave(
+  requestId: string,
+  actor: SlackEmployee
+): Promise<DecisionOutcome> {
+  let id: string;
+  try {
+    id = assertSalesforceId(requestId);
+  } catch {
+    return { decided: false, message: "That request id is not valid." };
+  }
+
+  const [record] = await query<{
+    Id: string;
+    Employee__c: string | null;
+    Status__c: string | null;
+    To_Date__c: string | null;
+    Days__c: number | null;
+  }>(`
+    SELECT Id, Employee__c, Status__c, To_Date__c, Days__c
+    FROM Leave_Request__c WHERE Id = '${id}' LIMIT 1
+  `);
+
+  if (!record) return { decided: false, message: "That request no longer exists." };
+  if (record.Employee__c !== actor.Id) {
+    return { decided: false, message: "You can only cancel your own leave." };
+  }
+  if (record.Status__c !== "Submitted" && record.Status__c !== "Approved") {
+    return { decided: false, message: `That request is already ${record.Status__c}.` };
+  }
+  if (record.To_Date__c && record.To_Date__c < businessToday()) {
+    return {
+      decided: false,
+      message: "That leave has already been taken. Ask HR to correct it.",
+    };
+  }
+
+  await updateRecord("Leave_Request__c", id, {
+    Status__c: "Cancelled",
+    Cancelled_On__c: new Date().toISOString(),
+    Cancellation_Reason__c: "Cancelled by the requester in Slack",
+  });
+
+  return {
+    decided: true,
+    message: `Leave cancelled. ${record.Days__c ?? 0} day(s) returned to your balance.`,
+  };
 }

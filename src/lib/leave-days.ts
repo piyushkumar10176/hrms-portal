@@ -18,11 +18,27 @@ function toISODate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** The working shift, used to describe half-day sessions. */
+export const SHIFT_START = "10:00";
+export const SHIFT_END = "19:00";
+/** Midpoint of a 10:00 to 19:00 shift. */
+export const SHIFT_MIDPOINT = "14:30";
+
+export type HalfDaySession = "First Half" | "Second Half";
+
+/** Human description of a half-day session, for confirmations and messages. */
+export function describeHalfDay(session: HalfDaySession): string {
+  return session === "First Half"
+    ? `first half, ${SHIFT_START} to ${SHIFT_MIDPOINT}`
+    : `second half, ${SHIFT_MIDPOINT} to ${SHIFT_END}`;
+}
+
 /**
  * Counts working days between two dates inclusive, excluding Saturdays,
  * Sundays and any date present in `holidayDates` (yyyy-mm-dd strings).
  *
- * A half-day request over a single date counts as 0.5.
+ * A half-day request counts as 0.5 and is only valid on a single date. Half a
+ * day across a range is meaningless, so callers must reject that before asking.
  */
 export function countWorkingDays(
   fromDate: string,

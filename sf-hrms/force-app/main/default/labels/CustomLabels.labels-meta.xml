@@ -30,7 +30,7 @@
         <language>en_US</language>
         <protected>false</protected>
         <shortDescription>Shift start time HH:mm used for lateness when no shift is assigned</shortDescription>
-        <value>09:30</value>
+        <value>10:00</value>
     </labels>
     <labels>
         <fullName>HRMS_Default_Grace_Minutes</fullName>
@@ -63,5 +63,13 @@
         <protected>false</protected>
         <shortDescription>Regularization requests each employee may raise per calendar month</shortDescription>
         <value>3</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Default_Shift_End</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Shift end time HH:mm used to describe half day sessions</shortDescription>
+        <value>19:00</value>
     </labels>
 </CustomLabels>

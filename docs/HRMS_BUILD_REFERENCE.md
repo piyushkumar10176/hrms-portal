@@ -195,6 +195,7 @@ Three roles. There is no formal role hierarchy in Salesforce; the model is
 | See their leave balance | `/myleave balance` |
 | Apply for leave | `/myleave apply`, or the button on the balance |
 | See their own requests and status | `/myleave status` |
+| Cancel their own upcoming leave | `/myleave cancel` |
 | Clock in and out | `/attendance in`, `/attendance out` |
 | See today's punches | `/attendance today` |
 | See who is out today | `/whosout` |
@@ -206,8 +207,9 @@ Three roles. There is no formal role hierarchy in Salesforce; the model is
 leave history, payslips, expenses, loans, the org chart.
 
 **Cannot**: see anyone else's balance, payslip, bank details or documents;
-approve anything, including their own request; change their own leave after
-submitting; alter attendance directly.
+approve anything, including their own request; amend a submitted request, though
+it can be cancelled; alter attendance directly; cancel leave that has already
+been taken, which is an HR correction.
 
 ### Manager
 
@@ -272,8 +274,6 @@ Honest list of gaps, so nobody goes looking.
 
 **Not built at all**
 
-- Cancel or amend a leave request after submitting. The status exists; there is
-  no route to it.
 - Expenses or reimbursement claims from Slack. Objects exist, no surface.
 - Employee profile or team directory in Slack.
 - Onboarding and offboarding checklists. The trigger generates tasks from
@@ -284,7 +284,6 @@ Honest list of gaps, so nobody goes looking.
 - Audit log of status changes.
 - Weekly or monthly scheduled reports. Only the daily digest exists.
 - Asset issue and return.
-- Half-day leave through Slack. The field exists and the modal does not offer it.
 
 **Deliberately out of scope**
 
@@ -450,6 +449,41 @@ On a decision the original message is rewritten in place: buttons removed, a
 line appended naming who decided. On a refusal the message is untouched and only
 the clicker sees why.
 
+### Cancelling
+
+The requester, and only the requester, may cancel their own leave through
+`/myleave cancel`. It works both before and after approval.
+
+The rule is that leave which has wholly passed cannot be self-cancelled: once
+`To_Date__c` is behind today, correcting it is an HR matter, not self-service.
+Everything still upcoming, whether `Submitted` or `Approved`, can go.
+
+No balance adjustment is written by the cancel action. `Cancelled` is simply not
+one of the statuses that consume leave, so the existing trigger recalculates and
+the days come back on their own. Verified end to end: a 0.5 day approved request
+moved availed from 3 to 3.5, and cancelling returned it to exactly 3.
+
+`Cancelled_On__c` and `Cancellation_Reason__c` are stamped so a cancelled
+request still explains itself later.
+
+### Half days
+
+The modal offers three durations:
+
+| Choice | Counts as | Covers |
+|---|---|---|
+| Full day | 1 per working day | the whole shift |
+| Half day, first half | 0.5 | 10:00 to 14:30 |
+| Half day, second half | 0.5 | 14:30 to 19:00 |
+
+The shift is 10:00 to 19:00, nine hours, so the midpoint is 14:30. All three
+times come from Custom Labels.
+
+A half day applies to **one date only**. Half of several days is meaningless, so
+selecting a half day across a range is refused rather than guessed at. A half
+day on a weekend or public holiday counts as zero, like any other non-working
+day, and is refused for having no working days in range.
+
 ### Day counting
 
 Days are **always** computed on the server from the date range. The client
@@ -609,7 +643,8 @@ is enforced when the request is made instead.
 | `HRMS_Penalty_Minimum_Hours` | 9 | Working less than this is a penalty |
 | `HRMS_Default_Full_Day_Hours` | 9 | Hours that count as a full day |
 | `HRMS_Default_Half_Day_Hours` | 4 | Hours that count as a half day |
-| `HRMS_Default_Shift_Start` | 09:30 | Shift start when no shift is assigned |
+| `HRMS_Default_Shift_Start` | 10:00 | Shift start when no shift is assigned |
+| `HRMS_Default_Shift_End` | 19:00 | Shift end, used to describe half-day sessions |
 | `HRMS_Default_Grace_Minutes` | 15 | Grace before lateness counts |
 | `HRMS_Regularizations_Per_Month` | 3 | Allowance per employee per month |
 
@@ -703,8 +738,6 @@ is the expensive part, not the software.
 
 | Capability | Rough effort |
 |---|---|
-| Cancel or amend a submitted leave request | 1 day |
-| Half-day leave in the Slack modal | 1 day |
 | Expenses and reimbursement claims in Slack | 3-4 days |
 | Employee profile and team directory in Slack | 2-3 days |
 | Onboarding and offboarding checklists | 1 week |

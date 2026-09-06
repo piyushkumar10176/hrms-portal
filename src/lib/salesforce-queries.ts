@@ -853,3 +853,33 @@ export async function getPenaltySummary(isoDate: string) {
     LIMIT 100
   `);
 }
+
+/**
+ * Requests the employee may still cancel: their own, not yet decided against
+ * them, and not already finished.
+ *
+ * Leave that has wholly passed is deliberately excluded. Cancelling a day
+ * already taken is an HR correction, not self-service.
+ */
+export async function getCancellableRequests(employeeId: string, isoToday: string) {
+  return query<{
+    Id: string;
+    Name: string;
+    Status__c: string;
+    From_Date__c: string;
+    To_Date__c: string;
+    Days__c: number;
+    Half_Day__c: boolean | null;
+    Half_Day_Session__c: string | null;
+    Leave_Type__r?: { Name?: string } | null;
+  }>(`
+    SELECT Id, Name, Status__c, From_Date__c, To_Date__c, Days__c,
+           Half_Day__c, Half_Day_Session__c, Leave_Type__r.Name
+    FROM Leave_Request__c
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
+      AND Status__c IN ('Submitted','Approved')
+      AND To_Date__c >= ${isoToday}
+    ORDER BY From_Date__c ASC
+    LIMIT 20
+  `);
+}

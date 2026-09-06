@@ -19,7 +19,7 @@ private class AttendanceRollupServiceTest {
     private static Attendance__c attendanceFor(Id employeeId, Date day) {
         List<Attendance__c> rows = [
             SELECT Id, Date__c, Check_In__c, Check_Out__c, Total_Hours__c,
-                   Late_By_Minutes__c, Status__c
+                   Late_By_Minutes__c, Status__c, Penalty__c, Penalty_Reason__c
             FROM Attendance__c
             WHERE Employee__c = :employeeId AND Date__c = :day
         ];
@@ -28,7 +28,7 @@ private class AttendanceRollupServiceTest {
 
     @isTest
     static void shouldCreateAttendance_WhenCheckInAndOutRecorded() {
-        // Given
+        // Given a 09:30 arrival, comfortably before the 10:00 shift start
         Employee__c employee = firstEmployee();
         List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
             TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 9, 30), 'Check-In'),
@@ -114,11 +114,14 @@ private class AttendanceRollupServiceTest {
 
     @isTest
     static void shouldRecordLateness_WhenArrivingAfterGrace() {
-        // Given a 10:30 arrival against a 09:30 start with 15 minutes grace
+        // The shift runs 10:00 to 19:00 with 15 minutes grace, so a 10:45 arrival
+        // is 45 minutes past the start and 30 minutes past the grace period. It is
+        // still before the 11:00 penalty cutoff, which keeps this test about
+        // lateness alone.
         Employee__c employee = firstEmployee();
         List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
-            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 30), 'Check-In'),
-            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 19, 0), 'Check-Out')
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 45), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 20, 0), 'Check-Out')
         };
 
         // When
@@ -127,8 +130,10 @@ private class AttendanceRollupServiceTest {
         Test.stopTest();
 
         // Then
-        Assert.areEqual(45, attendanceFor(employee.Id, WORKDAY).Late_By_Minutes__c,
-            'Sixty minutes late less fifteen minutes grace');
+        Attendance__c row = attendanceFor(employee.Id, WORKDAY);
+        Assert.areEqual(30, row.Late_By_Minutes__c,
+            'Forty-five minutes past the 10:00 start, less fifteen minutes grace');
+        Assert.isFalse(row.Penalty__c, 'Arriving before 11:00 and working a full shift is not a breach');
     }
 
     @isTest
@@ -194,7 +199,7 @@ private class AttendanceRollupServiceTest {
 
     @isTest
     static void shouldRemoveAttendance_WhenAllPunchesDeleted() {
-        // Given
+        // Given a 09:30 arrival, comfortably before the 10:00 shift start
         Employee__c employee = firstEmployee();
         List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
             TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 9, 30), 'Check-In'),

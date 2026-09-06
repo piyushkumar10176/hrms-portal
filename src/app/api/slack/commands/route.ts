@@ -29,6 +29,7 @@ import {
   getLeaveSummary,
   getPenaltySummary,
   getPendingRegularizationApprovals,
+  getCancellableRequests,
 } from "@/lib/salesforce-queries";
 import { toLeaveBalanceView } from "@/lib/leave-balance";
 import { businessTimeNow, businessToday } from "@/lib/business-time";
@@ -149,6 +150,51 @@ async function handleLeave(
     return;
   }
 
+  if (text === "cancel") {
+    const cancellable = await getCancellableRequests(employeeId, businessToday());
+    if (cancellable.length === 0) {
+      await postToResponseUrl(
+        responseUrl,
+        ephemeral("You have no upcoming leave to cancel. Leave already taken has to be corrected by HR.")
+      );
+      return;
+    }
+
+    const blocks: unknown[] = [
+      { type: "header", text: { type: "plain_text", text: "Cancel leave" } },
+    ];
+    for (const r of cancellable.slice(0, 8)) {
+      const span = r.From_Date__c === r.To_Date__c ? r.From_Date__c : `${r.From_Date__c} to ${r.To_Date__c}`;
+      const half = r.Half_Day__c ? ` (${r.Half_Day_Session__c ?? "half day"})` : "";
+      blocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*${r.Leave_Type__r?.Name ?? "Leave"}* — ${span}${half}\n${r.Days__c} day(s), currently *${r.Status__c}*`,
+        },
+      });
+      blocks.push({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            action_id: "cancel_leave",
+            style: "danger",
+            value: r.Id,
+            text: { type: "plain_text", text: "Cancel this leave" },
+          },
+        ],
+      });
+    }
+    blocks.push({
+      type: "context",
+      elements: [{ type: "mrkdwn", text: "Cancelling returns the days to your balance straight away." }],
+    });
+
+    await postToResponseUrl(responseUrl, { response_type: "ephemeral", blocks });
+    return;
+  }
+
   if (text === "status") {
     const requests = await getLeaveRequests(employeeId);
     if (requests.length === 0) {
@@ -198,7 +244,7 @@ async function handleLeave(
 
   await postToResponseUrl(
     responseUrl,
-    ephemeral("Try `/myleave balance`, `/myleave apply` or `/myleave status`.")
+    ephemeral("Try `/myleave balance`, `/myleave apply`, `/myleave status` or `/myleave cancel`.")
   );
 }
 
