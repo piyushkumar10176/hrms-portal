@@ -66,12 +66,19 @@ export async function POST(req: NextRequest) {
   return new NextResponse(null, { status: 200 });
 }
 
+/** A Block Kit block. Only the type matters here; the rest is passed through. */
+interface SlackBlock {
+  type: string;
+  [key: string]: unknown;
+}
+
 interface SlackInteraction {
   type: string;
   user?: { id: string };
   trigger_id?: string;
   response_url?: string;
   actions?: { action_id: string; value?: string }[];
+  message?: { blocks?: SlackBlock[] };
   view?: {
     callback_id?: string;
     state?: {
@@ -123,13 +130,37 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
 
     const decisionAction = decisionActions[action.action_id];
     if (decisionAction) {
-      const result = await decideRequest(
+      const outcome = await decideRequest(
         decisionAction.object, decisionAction.label, action.value ?? "", actor, decisionAction.decision
       );
+
+      if (!outcome.decided) {
+        // Refused, so leave the message alone: the buttons stay for whoever may
+        // legitimately act on it, and only the clicker sees why they could not.
+        await postToResponseUrl(responseUrl, ephemeral(outcome.message));
+        return;
+      }
+
+      // Decided: rewrite the original message without its buttons, so a settled
+      // request cannot be clicked again and the outcome is visible to everyone
+      // who can see it.
+      const original = payload.message?.blocks ?? [];
+      const withoutButtons = original.filter((block) => block.type !== "actions");
+      withoutButtons.push({
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `${decisionAction.decision === "Approved" ? ":white_check_mark:" : ":x:"} ` +
+                  `*${decisionAction.decision}* by ${actor.Name}`,
+          },
+        ],
+      });
+
       await postToResponseUrl(responseUrl, {
-        response_type: "ephemeral",
-        replace_original: false,
-        text: result,
+        replace_original: true,
+        blocks: withoutButtons,
+        text: outcome.message,
       });
     }
   } catch (err) {
@@ -141,18 +172,24 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
 /**
  * Applies a decision to a leave request, enforcing the same rules as the portal.
  */
+/** Whether the decision was applied, and what to tell the clicker. */
+interface DecisionOutcome {
+  decided: boolean;
+  message: string;
+}
+
 async function decideRequest(
   objectName: string,
   label: string,
   requestId: string,
   actor: SlackEmployee,
   decision: "Approved" | "Rejected"
-): Promise<string> {
+): Promise<DecisionOutcome> {
   let id: string;
   try {
     id = assertSalesforceId(requestId);
   } catch {
-    return "That request id is not valid.";
+    return { decided: false, message: "That request id is not valid." };
   }
 
   const [record] = await query<{
@@ -165,21 +202,28 @@ async function decideRequest(
     FROM ${objectName} WHERE Id = '${id}' LIMIT 1
   `);
 
-  if (!record) return "That request no longer exists.";
+  if (!record) return { decided: false, message: "That request no longer exists." };
 
   const isApprover = record.Approver__c === actor.Id;
   const isHrOverride = canOverrideApproval(actor);
   if (!isApprover && !isHrOverride) {
-    return "You are not the approver for that request.";
+    return { decided: false, message: "You are not the approver for that request." };
   }
   // Approving your own leave is refused even for HR.
-  if (record.Employee__c === actor.Id) return "You cannot decide your own request.";
-  if (record.Status__c !== "Submitted") return `That request is already ${record.Status__c}.`;
+  if (record.Employee__c === actor.Id) {
+    return { decided: false, message: "You cannot decide your own request." };
+  }
+  if (record.Status__c !== "Submitted") {
+    return { decided: false, message: `That request is already ${record.Status__c}.` };
+  }
 
   await updateRecord(objectName, id, { Status__c: decision });
-  return isApprover
-    ? `${label} ${decision.toLowerCase()}.`
-    : `${label} ${decision.toLowerCase()} as an HR override.`;
+  return {
+    decided: true,
+    message: isApprover
+      ? `${label} ${decision.toLowerCase()}.`
+      : `${label} ${decision.toLowerCase()} as an HR override.`,
+  };
 }
 
 /** Opens the apply-for-leave modal. */
