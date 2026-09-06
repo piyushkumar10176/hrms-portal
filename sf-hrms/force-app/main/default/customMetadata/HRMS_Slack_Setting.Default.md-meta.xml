@@ -7,6 +7,10 @@
         <value xsi:type="xsd:boolean">true</value>
     </values>
     <values>
+        <field>HR_Channel_Id__c</field>
+        <value xsi:type="xsd:string">C0BVCBYSEJV</value>
+    </values>
+    <values>
         <field>Workspace_Team_Id__c</field>
         <value xsi:type="xsd:string">T0BV8DT6LKG</value>
     </values>
