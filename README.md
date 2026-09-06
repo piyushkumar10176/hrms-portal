@@ -1,36 +1,47 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CloudSheer HRMS
 
-## Getting Started
+A Salesforce-backed HRMS with Slack as the primary employee interface and a
+Next.js web portal for administration.
 
-First, run the development server:
+Employees apply for leave, clock in and out, and get their approvals in Slack.
+Salesforce holds the record and every business rule. The portal covers what does
+not fit in a chat window.
+
+## Documentation
+
+| Document | Answers |
+|---|---|
+| [docs/BUILD_STATUS.md](docs/BUILD_STATUS.md) | What is built, what is not, and what is blocking each thing |
+| [docs/KEKA_PARITY.md](docs/KEKA_PARITY.md) | How this compares against Keka, module by module |
+| [docs/HRMS_BUILD_REFERENCE.md](docs/HRMS_BUILD_REFERENCE.md) | How the system works, in detail |
+| [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Objects, relationships and derived fields |
+
+## Layout
+
+| Path | Holds |
+|---|---|
+| `src/app` | Next.js App Router: pages, API routes, the Slack gateway |
+| `src/lib` | Salesforce access, permissions, attendance and leave calculation |
+| `sf-hrms/` | SFDX source: objects, fields, Apex, triggers, permission sets |
+| `scripts/` | One-off operational scripts |
+
+## Running locally
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Requires Salesforce credentials in `.env.local`. See
+[docs/HRMS_BUILD_REFERENCE.md](docs/HRMS_BUILD_REFERENCE.md) for the full
+configuration reference.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Pushing to `main` deploys the portal to Vercel automatically. Salesforce metadata
+deploys separately:
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+cd sf-hrms
+sf project deploy start --source-dir force-app --target-org hrms-org
+```

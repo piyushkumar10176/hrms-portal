@@ -12,9 +12,12 @@ the system is used.
 | | |
 |---|---|
 | Employees | 28 active, 1 inactive system account |
-| Custom objects | 34 deployed, 12 still empty |
-| Apex tests | 104 passing, 86% org-wide coverage |
+| Custom objects | 34 deployed, 16 still empty |
+| Apex tests | 121 passing, 88% org-wide coverage |
 | Slack commands | 9 across 6 registrations |
+
+For what is finished and what is not, see [BUILD_STATUS.md](BUILD_STATUS.md).
+For how this compares against Keka, see [KEKA_PARITY.md](KEKA_PARITY.md).
 
 ---
 
