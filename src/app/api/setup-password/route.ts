@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { queryOneOrNull, updateRecord } from "@/lib/salesforce";
 import { hashSync } from "bcryptjs";
+import { escapeSoqlString } from "@/lib/soql";
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
     const emp = await queryOneOrNull<{ Id: string; Invite_Token_Expires_At__c: string }>(`
       SELECT Id, Invite_Token_Expires_At__c
       FROM Employee__c
-      WHERE Invite_Token__c = '${token.replace(/'/g, "\\'")}'
+      WHERE Invite_Token__c = '${escapeSoqlString(token)}'
         AND Employee_Status__c = 'Active'
       LIMIT 1
     `);

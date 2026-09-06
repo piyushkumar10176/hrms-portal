@@ -8,7 +8,8 @@ import {
   getPendingReimbursementApprovals,
   createHistoryRecord 
 } from "@/lib/salesforce-queries";
-import { updateRecord, createRecord, getSalesforceConnection } from "@/lib/salesforce";
+import { updateRecord, createRecord, query } from "@/lib/salesforce";
+import { assertSalesforceId, InvalidSalesforceIdError } from "@/lib/soql";
 
 export const dynamic = "force-dynamic";
 
@@ -104,76 +105,120 @@ export async function POST(req: NextRequest) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const { requestId, action, type, employeeId } = await req.json();
-  if (!requestId || !["approve", "reject"].includes(action) || !type || !employeeId) {
+  const { requestId, action, type } = await req.json();
+  if (!requestId || !["approve", "reject"].includes(action) || !type) {
     return NextResponse.json({ error: "Invalid request parameters" }, { status: 400 });
   }
 
+  const OBJECTS: Record<string, { object: string; label: string }> = {
+    Leave: { object: "Leave_Request__c", label: "Leave Request" },
+    Regularization: { object: "Regularization_Request__c", label: "Attendance Regularization" },
+    Expense: { object: "Expense_Report__c", label: "Expense Report" },
+    Reimbursement: { object: "Reimbursement__c", label: "Reimbursement Claim" },
+  };
+
+  const target = OBJECTS[type as string];
+  if (!target) {
+    return NextResponse.json({ error: "Invalid approval type" }, { status: 400 });
+  }
+
   try {
+    const recordId = assertSalesforceId(requestId);
     const manager = await getEmployeeByEmail(session.user.email);
     const newStatus = action === "approve" ? "Approved" : "Rejected";
-    
-    let objectName = "";
-    let actionDesc = "";
 
-    if (type === "Leave") {
-      objectName = "Leave_Request__c";
-      actionDesc = "Leave Request";
-    } else if (type === "Regularization") {
-      objectName = "Regularization_Request__c";
-      actionDesc = "Attendance Regularization";
-    } else if (type === "Expense") {
-      objectName = "Expense_Report__c";
-      actionDesc = "Expense Report";
-    } else if (type === "Reimbursement") {
-      objectName = "Reimbursement__c";
-      actionDesc = "Reimbursement Claim";
-    } else {
-      return NextResponse.json({ error: "Invalid approval type" }, { status: 400 });
+    // Authorization. The caller must be the approver recorded on the request
+    // itself, or an admin. Without this check any authenticated employee could
+    // approve their own request by posting its id, and the previous code then
+    // overwrote Approver__c with the caller, erasing who should have decided.
+    const [record] = await query<{
+      Id: string;
+      Approver__c: string | null;
+      Employee__c: string | null;
+      Status__c: string | null;
+    }>(`
+      SELECT Id, Approver__c, Employee__c, Status__c
+      FROM ${target.object}
+      WHERE Id = '${recordId}'
+      LIMIT 1
+    `);
+
+    if (!record) {
+      return NextResponse.json({ error: "Request not found" }, { status: 404 });
     }
 
-    // Since we just need to update the status and approver, we can do it generically
-    await updateRecord(objectName, requestId, {
-      Status__c: newStatus,
-      Approver__c: manager.Id,
-    });
+    const isAdmin = session.user.role === "admin";
+    if (!isAdmin && record.Approver__c !== manager.Id) {
+      return NextResponse.json(
+        { error: "You are not the approver for this request" },
+        { status: 403 }
+      );
+    }
 
-    // Create history record for the manager
+    if (record.Employee__c === manager.Id && !isAdmin) {
+      return NextResponse.json(
+        { error: "You cannot approve your own request" },
+        { status: 403 }
+      );
+    }
+
+    // Only a request still awaiting a decision can be actioned. This also closes
+    // the double-submit race where two approvers act on the same record.
+    if (record.Status__c !== "Submitted") {
+      return NextResponse.json(
+        { error: `This request is already ${record.Status__c}` },
+        { status: 409 }
+      );
+    }
+
+    // employeeId is taken from the record, never from the request body, so a
+    // caller cannot direct the resulting history and notification at someone else.
+    const employeeId = record.Employee__c;
+
+    await updateRecord(target.object, recordId, { Status__c: newStatus });
+
     const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
     await createHistoryRecord({
       employeeId: manager.Id,
       date: today,
       type: `${action === "approve" ? "Approved" : "Rejected"} ${type}`,
-      description: `${action === "approve" ? "Approved" : "Rejected"} a ${actionDesc}.`
+      description: `${action === "approve" ? "Approved" : "Rejected"} a ${target.label}.`
     });
 
-    // Create history record for the employee
-    await createHistoryRecord({
-      employeeId: employeeId,
-      date: today,
-      type: `${type} ${newStatus}`,
-      description: `Your ${actionDesc} was ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`
-    });
-
-    // Create in-app notification for the employee
-    try {
-      await createRecord("Notification__c", {
-        Employee__c: employeeId,
-        Message__c: `Your ${actionDesc} has been ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`,
-        Type__c: type,
-        Is_Read__c: false,
-        Related_Record_Id__c: requestId,
+    if (employeeId) {
+      await createHistoryRecord({
+        employeeId,
+        date: today,
+        type: `${type} ${newStatus}`,
+        description: `Your ${target.label} was ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`
       });
-    } catch (notifErr) {
-      console.warn("Notification creation failed (non-fatal):", notifErr);
+
+      // Leave notifications are raised by LeaveRequestTriggerHandler in Salesforce,
+      // so only the other types need one written here.
+      if (type !== "Leave") {
+        try {
+          await createRecord("Notification__c", {
+            Employee__c: employeeId,
+            Message__c: `Your ${target.label} has been ${newStatus.toLowerCase()} by ${manager.Name || "your manager"}.`,
+            Type__c: type,
+            Is_Read__c: false,
+            Related_Record_Id__c: recordId,
+          });
+        } catch (notifErr) {
+          console.warn("Notification creation failed (non-fatal):", notifErr);
+        }
+      }
     }
 
-    return NextResponse.json({ 
-      request: { id: requestId, status: newStatus }, 
-      message: `${type} ${action}d successfully` 
+    return NextResponse.json({
+      request: { id: recordId, status: newStatus },
+      message: `${target.label} ${action}d successfully`
     });
 
   } catch (err) {
+    if (err instanceof InvalidSalesforceIdError) {
+      return NextResponse.json({ error: "Invalid request id" }, { status: 400 });
+    }
     console.error("Salesforce approval update error:", err);
     return NextResponse.json({ error: "Failed to process approval" }, { status: 500 });
   }

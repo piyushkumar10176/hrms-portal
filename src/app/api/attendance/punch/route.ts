@@ -36,6 +36,15 @@ export async function POST(req: NextRequest) {
 
   const { action, latitude, longitude } = await req.json();
 
+  // Anything that was not exactly "clockIn" previously fell through to a
+  // Check-Out, so a malformed action silently recorded the wrong punch.
+  if (action !== "clockIn" && action !== "clockOut") {
+    return NextResponse.json(
+      { error: 'action must be "clockIn" or "clockOut"' },
+      { status: 400 }
+    );
+  }
+
   try {
     const sfEmp = await getEmployeeByEmail(session.user.email);
     const punchType = action === "clockIn" ? "Check-In" : "Check-Out";

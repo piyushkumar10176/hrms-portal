@@ -64,6 +64,10 @@ export async function PUT(req: NextRequest) {
   if (body.panNumber !== undefined) allowedUpdates.PAN__c = body.panNumber;
   if (body.aadharNumber !== undefined) allowedUpdates.Aadhaar__c = body.aadharNumber;
 
+  if (Object.keys(allowedUpdates).length === 0) {
+    return NextResponse.json({ error: "No editable fields supplied" }, { status: 400 });
+  }
+
   try {
     const sfEmp = await getEmployeeByEmail(session.user.email);
     await updateRecord("Employee__c", sfEmp.Id, allowedUpdates);

@@ -39,6 +39,14 @@ export default function ApprovalsPage() {
       body: JSON.stringify({ requestId, action, type, employeeId }),
     });
     const data = await res.json();
+    if (!res.ok) {
+      // The server rejects an approval when the caller is not the recorded
+      // approver, or when the request has already been decided. Surface that
+      // instead of silently removing the row from the list.
+      setMsg(data.error || "Could not process this approval");
+      setLoading(null);
+      return;
+    }
     setMsg(data.message);
     setApprovals(prev => prev.filter(a => a.id !== requestId));
     setLoading(null);
