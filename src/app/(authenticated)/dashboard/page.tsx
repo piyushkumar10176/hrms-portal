@@ -4,12 +4,29 @@ import { useSession } from "next-auth/react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useClock } from "@/hooks/use-clock";
+
+interface ReportBalance {
+  leaveType: string;
+  code: string;
+  total: number;
+  used: number;
+  available: number;
+}
+
+interface DirectReportLeave {
+  id: string;
+  name: string;
+  designation: string;
+  usedLeaves: number;
+  totalLeaves: number;
+  balances: ReportBalance[];
+}
 
 export default function DashboardPage() {
   const { data: session } = useSession();
   const router = useRouter();
-  const [mounted, setMounted] = useState(false);
-  const [time, setTime] = useState(new Date());
+  const time = useClock();
   const [todayAttendance, setTodayAttendance] = useState<{ clockIn: string | null; clockOut: string | null; status: string } | null>(null);
   const [leaveBalances, setLeaveBalances] = useState<{ leaveType: string; code: string; available: number; total: number; used: number; color: string }[]>([]);
   const [pendingCount, setPendingCount] = useState(0);
@@ -17,14 +34,7 @@ export default function DashboardPage() {
   const [holidays, setHolidays] = useState<{ name: string; date: string }[]>([]);
   const [birthdays, setBirthdays] = useState<{ employee: { firstName: string; lastName: string; department: string }; daysAway: number }[]>([]);
   const [teamOnLeave, setTeamOnLeave] = useState<{ name: string; leaveType: string; fromDate?: string; toDate?: string }[]>([]);
-  const [directReportsLeaves, setDirectReportsLeaves] = useState<any[]>([]);
-
-  useEffect(() => { setMounted(true); }, []);
-  useEffect(() => {
-    if (!mounted) return;
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [mounted]);
+  const [directReportsLeaves, setDirectReportsLeaves] = useState<DirectReportLeave[]>([]);
 
   useEffect(() => {
     Promise.all([
@@ -47,7 +57,7 @@ export default function DashboardPage() {
   }, []);
 
   const isAdmin = session?.user?.role === "admin";
-  const greeting = mounted ? (time.getHours() < 12 ? "Good morning" : time.getHours() < 17 ? "Good afternoon" : "Good evening") : "Welcome";
+  const greeting = time ? (time.getHours() < 12 ? "Good morning" : time.getHours() < 17 ? "Good afternoon" : "Good evening") : "Welcome";
   const totalLeave = leaveBalances.reduce((sum, b) => sum + (b.available || 0), 0);
 
   const handleClockIn = async () => {
@@ -63,7 +73,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Welcome Banner */}
       <div className="bg-gradient-to-r from-[#2c2759] to-[#3b3469] rounded-2xl p-6 text-white">
-        <h1 className="text-xl font-bold">Welcome {session?.user?.name?.split(" ")[0]}!</h1>
+        <h1 className="text-xl font-bold">{greeting} {session?.user?.name?.split(" ")[0]}!</h1>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -144,15 +154,15 @@ export default function DashboardPage() {
           {/* Time + Web Clock-In */}
           <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-xl p-4 text-white">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs opacity-80">Time Today — {mounted ? time.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : ""}</p>
+              <p className="text-xs opacity-80">Time Today — {time ? time.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : ""}</p>
               <Link href="/attendance" className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full hover:bg-white/30 transition">View All</Link>
             </div>
             <p className="text-xs opacity-60 mt-1">CURRENT TIME</p>
             <p className="text-3xl font-bold tabular-nums" suppressHydrationWarning>
-              {mounted ? time.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
+              {time ? time.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }) : "--:--"}
               <span className="text-sm font-normal ml-1 opacity-80" suppressHydrationWarning>
-                {mounted ? time.toLocaleTimeString("en-IN", { second: "2-digit" }).split(":").pop()?.replace(/[^\d]/g, "") : ""}
-                {mounted ? (time.getHours() >= 12 ? " PM" : " AM") : ""}
+                {time ? time.toLocaleTimeString("en-IN", { second: "2-digit" }).split(":").pop()?.replace(/[^\d]/g, "") : ""}
+                {time ? (time.getHours() >= 12 ? " PM" : " AM") : ""}
               </span>
             </p>
             {!todayAttendance?.clockIn ? (
@@ -312,7 +322,7 @@ export default function DashboardPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {directReportsLeaves.map((report: any) => (
+                    {directReportsLeaves.map((report: DirectReportLeave) => (
                       <tr key={report.id} className="hover:bg-gray-50 transition-colors">
                         <td className="px-4 py-3">
                           <div className="font-medium text-gray-900">{report.name}</div>
@@ -325,7 +335,7 @@ export default function DashboardPage() {
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex gap-2 flex-wrap">
-                            {report.balances.map((b: any) => (
+                            {report.balances.map((b: ReportBalance) => (
                               <span key={b.code} title={b.leaveType} className="text-xs px-2 py-1 rounded border border-gray-200 bg-white">
                                 {b.code}: <strong className={b.used > 0 ? "text-gray-900" : "text-gray-400"}>{b.used}</strong>/{b.total}
                               </span>

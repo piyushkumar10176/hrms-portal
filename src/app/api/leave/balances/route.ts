@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getLeaveBalances } from '@/lib/salesforce-queries';
+import { getLeaveBalances } from '@/lib/salesforce-queries';
 import { toLeaveBalanceView } from '@/lib/leave-balance';
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export const dynamic = 'force-dynamic';
 
@@ -10,13 +11,16 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     const sfBalances = await getLeaveBalances(sfEmp.Id);
     
     const balances = sfBalances.map((b, i) => toLeaveBalanceView(b, i));
 
     return NextResponse.json({ balances, source: "salesforce" });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce getLeaveBalances error:", err);
     return NextResponse.json({ error: "Failed to fetch leave balances" }, { status: 500 });
   }

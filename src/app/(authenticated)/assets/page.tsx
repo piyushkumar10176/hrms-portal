@@ -11,17 +11,25 @@ export default function AssetsPage() {
   const { data: session } = useSession();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
-
-  useEffect(() => { if (session) fetchAssets(); }, [session]);
-
-  const fetchAssets = async () => {
-    try {
-      const res = await fetch("/api/assets");
-      const data = await res.json();
-      if (res.ok) setAssets(data.assets || []);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    if (!session) return;
+    // `ignore` discards a response that arrives after the effect was cleaned
+    // up or superseded, which otherwise sets state on an unmounted component
+    // and can apply an older response over a newer one.
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/assets");
+        const data = await res.json();
+        if (!ignore && res.ok) setAssets(data.assets || []);
+      } catch (err) {
+        if (!ignore) console.error(err);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [session]);
 
   const typeIcon = (t: string) => {
     if (t === "Laptop") return "💻";

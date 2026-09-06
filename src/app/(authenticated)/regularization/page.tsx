@@ -25,14 +25,14 @@ export default function RegularizationPage() {
     if (session) fetchRequests();
   }, [session]);
 
-  const fetchRequests = async () => {
+  async function fetchRequests() {
     try {
       const res = await fetch("/api/regularization");
       const data = await res.json();
       if (res.ok) setRequests(data.requests || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  };
+  }
 
   const handleSubmit = async () => {
     if (!form.date || !form.reason) {

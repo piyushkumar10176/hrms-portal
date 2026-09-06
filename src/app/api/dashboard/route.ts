@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
-import { toLeaveBalanceView } from "@/lib/leave-balance";
+import { toLeaveBalanceView, type LeaveBalanceView } from "@/lib/leave-balance";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getTeamMembers, getTeamLeaveCalendar, getLeaveBalances, getAllEmployees, getHolidays } from "@/lib/salesforce-queries";
+import { getTeamMembers, getTeamLeaveCalendar, getAllEmployees, getHolidays, getLeaveBalancesForEmployees } from "@/lib/salesforce-queries";
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export const dynamic = "force-dynamic";
 
@@ -10,13 +11,28 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     
     // Get Team Members
     const reports = await getTeamMembers(sfEmp.Id);
     
-    let directReportsLeaves: any[] = [];
-    let teamOnLeave: any[] = [];
+    interface DirectReportLeave {
+      id: string;
+      name: string;
+      designation: string;
+      usedLeaves: number;
+      totalLeaves: number;
+      balances: LeaveBalanceView[];
+    }
+    interface TeamLeaveDay {
+      name: string;
+      leaveType: string;
+      fromDate?: string | null;
+      toDate?: string | null;
+      status?: string | null;
+    }
+    const directReportsLeaves: DirectReportLeave[] = [];
+    let teamOnLeave: TeamLeaveDay[] = [];
     
     if (reports.length > 0) {
       // Fetch leaves for each direct report
@@ -34,12 +50,17 @@ export async function GET() {
         status: l.Status__c
       }));
       
+      // One query for every direct report. This loop previously awaited
+      // getLeaveBalances once per report, so a manager with ten reports cost ten
+      // sequential round trips to Salesforce.
+      const balancesByEmployee = await getLeaveBalancesForEmployees(reports.map(r => r.Id));
+
       for (const r of reports) {
-        const balances = await getLeaveBalances(r.Id);
+        const balances = balancesByEmployee.get(r.Id) ?? [];
         const formattedBalances = balances.map((b, i) => toLeaveBalanceView(b, i));
         const usedLeaves = formattedBalances.reduce((sum, b) => sum + b.used, 0);
         const totalLeaves = formattedBalances.reduce((sum, b) => sum + b.total, 0);
-        
+
         directReportsLeaves.push({
           id: r.Id,
           name: r.Name,
@@ -90,6 +111,9 @@ export async function GET() {
     
     return NextResponse.json({ birthdays, teamOnLeave, directReportsLeaves, holidays, source: "salesforce" });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce dashboard fetch error:", err);
     return NextResponse.json({ error: "Failed to fetch dashboard data" }, { status: 500 });
   }

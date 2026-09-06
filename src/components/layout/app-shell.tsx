@@ -1,7 +1,7 @@
 "use client";
 
 import { useSession, signOut } from "next-auth/react";
-import { usePathname, useRouter } from "next/navigation";
+import {usePathname } from "next/navigation";
 import { useState, useEffect } from "react";
 import { Search, Bell } from "lucide-react";
 import Link from "next/link";
@@ -25,7 +25,6 @@ const NAV_ITEMS = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { data: session } = useSession();
   const pathname = usePathname();
-  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hoveredMenu, setHoveredMenu] = useState<string | null>(null);
   

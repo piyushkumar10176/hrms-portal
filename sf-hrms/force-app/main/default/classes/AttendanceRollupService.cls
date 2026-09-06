@@ -1,0 +1,358 @@
+/**
+ * Rebuilds daily Attendance__c rows from raw Attendance_Punch__c records.
+ *
+ * Punches are the source of truth. For each affected (Employee, business date)
+ * this service derives the first check-in, the last check-out, hours worked,
+ * lateness against the assigned shift, and a day status, then upserts the
+ * matching Attendance__c row.
+ *
+ * Dates are bucketed in the HRMS business time zone (Custom Label
+ * HRMS_Business_Time_Zone), not the running user's. The integration user runs in
+ * America/Los_Angeles while the business runs in Asia/Kolkata, so using
+ * DateTime.date() here would file evening punches against the wrong day.
+ */
+public with sharing class AttendanceRollupService {
+    private static final String CHECK_IN = 'Check-In';
+    private static final String CHECK_OUT = 'Check-Out';
+    private static final String STATUS_PRESENT = 'Present';
+    private static final String STATUS_HALF_DAY = 'Half Day';
+    private static final String STATUS_ABSENT = 'Absent';
+    private static final String STATUS_HOLIDAY = 'Holiday';
+    private static final String STATUS_WEEK_OFF = 'Week Off';
+
+    /** Punch type values are free text; treat these as a check-in. */
+    private static final Set<String> CHECK_IN_ALIASES = new Set<String>{
+        'check-in', 'check in', 'checkin', 'in'
+    };
+
+    @TestVisible
+    private static String businessTimeZone() {
+        return String.isBlank(Label.HRMS_Business_Time_Zone)
+            ? 'Asia/Kolkata'
+            : Label.HRMS_Business_Time_Zone.trim();
+    }
+
+    private static Decimal labelAsDecimal(String raw, Decimal fallback) {
+        try {
+            return String.isBlank(raw) ? fallback : Decimal.valueOf(raw.trim());
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    /**
+     * Entry point used by AttendancePunchTrigger.
+     *
+     * @param changedPunches punches from Trigger.new and/or Trigger.old
+     */
+    public static void rebuild(List<Attendance_Punch__c> changedPunches) {
+        if (changedPunches == null || changedPunches.isEmpty()) {
+            return;
+        }
+
+        Set<Id> employeeIds = new Set<Id>();
+        Set<Date> businessDates = new Set<Date>();
+        for (Attendance_Punch__c punch : changedPunches) {
+            if (punch.Employee__c == null || punch.Punch_DateTime__c == null) {
+                continue;
+            }
+            employeeIds.add(punch.Employee__c);
+            businessDates.add(toBusinessDate(punch.Punch_DateTime__c));
+        }
+        if (employeeIds.isEmpty() || businessDates.isEmpty()) {
+            return;
+        }
+
+        Date windowStart = null;
+        Date windowEnd = null;
+        for (Date businessDate : businessDates) {
+            if (windowStart == null || businessDate < windowStart) {
+                windowStart = businessDate;
+            }
+            if (windowEnd == null || businessDate > windowEnd) {
+                windowEnd = businessDate;
+            }
+        }
+
+        // Widen by a day on each side so punches near midnight in the business
+        // time zone are still captured by a UTC-bounded query.
+        DateTime rangeStart = DateTime.newInstanceGmt(windowStart.addDays(-1), Time.newInstance(0, 0, 0, 0));
+        DateTime rangeEnd = DateTime.newInstanceGmt(windowEnd.addDays(2), Time.newInstance(0, 0, 0, 0));
+
+        Map<String, DayTotals> totalsByKey = new Map<String, DayTotals>();
+        for (Attendance_Punch__c punch : [
+            SELECT Id, Employee__c, Punch_DateTime__c, Punch_Type__c
+            FROM Attendance_Punch__c
+            WHERE Employee__c IN :employeeIds
+              AND Punch_DateTime__c >= :rangeStart
+              AND Punch_DateTime__c < :rangeEnd
+            ORDER BY Punch_DateTime__c ASC
+        ]) {
+            if (punch.Punch_DateTime__c == null) {
+                continue;
+            }
+            Date businessDate = toBusinessDate(punch.Punch_DateTime__c);
+            if (!businessDates.contains(businessDate)) {
+                continue;
+            }
+            String key = buildKey(punch.Employee__c, businessDate);
+            DayTotals totals = totalsByKey.get(key);
+            if (totals == null) {
+                totals = new DayTotals(punch.Employee__c, businessDate);
+                totalsByKey.put(key, totals);
+            }
+            totals.apply(punch);
+        }
+
+        // Every affected (employee, date) needs a row even when all its punches
+        // were deleted, so the stale Attendance__c row is corrected rather than left.
+        for (Id employeeId : employeeIds) {
+            for (Date businessDate : businessDates) {
+                String key = buildKey(employeeId, businessDate);
+                if (!totalsByKey.containsKey(key)) {
+                    totalsByKey.put(key, new DayTotals(employeeId, businessDate));
+                }
+            }
+        }
+
+        applyTotals(totalsByKey, employeeIds, windowStart, windowEnd);
+    }
+
+    private static void applyTotals(
+        Map<String, DayTotals> totalsByKey,
+        Set<Id> employeeIds,
+        Date windowStart,
+        Date windowEnd
+    ) {
+        Map<Id, Shift__c> shiftByEmployee = loadShifts(employeeIds, windowStart, windowEnd);
+        Set<Date> holidayDates = loadHolidays(windowStart, windowEnd);
+
+        Map<String, Attendance__c> existingByKey = new Map<String, Attendance__c>();
+        for (Attendance__c attendance : [
+            SELECT Id, Employee__c, Date__c, Check_In__c, Check_Out__c,
+                   Total_Hours__c, Late_By_Minutes__c, Status__c
+            FROM Attendance__c
+            WHERE Employee__c IN :employeeIds
+              AND Date__c >= :windowStart
+              AND Date__c <= :windowEnd
+        ]) {
+            existingByKey.put(buildKey(attendance.Employee__c, attendance.Date__c), attendance);
+        }
+
+        List<Attendance__c> toUpsert = new List<Attendance__c>();
+        List<Attendance__c> toDelete = new List<Attendance__c>();
+
+        for (String key : totalsByKey.keySet()) {
+            DayTotals totals = totalsByKey.get(key);
+            Attendance__c existing = existingByKey.get(key);
+
+            if (!totals.hasAnyPunch()) {
+                // No punches left for that day. Remove a row this rollup created
+                // rather than leaving a phantom Present record behind.
+                if (existing != null) {
+                    toDelete.add(new Attendance__c(Id = existing.Id));
+                }
+                continue;
+            }
+
+            Shift__c shift = shiftByEmployee.get(totals.employeeId);
+            Attendance__c row = existing == null
+                ? new Attendance__c(Employee__c = totals.employeeId, Date__c = totals.businessDate)
+                : new Attendance__c(Id = existing.Id);
+
+            row.Check_In__c = totals.firstCheckIn;
+            row.Check_Out__c = totals.lastCheckOut;
+            row.Total_Hours__c = totals.hoursWorked();
+            row.Late_By_Minutes__c = totals.lateMinutes(shift, businessTimeZone());
+            row.Status__c = deriveStatus(totals, shift, holidayDates);
+
+            if (existing == null || isChanged(existing, row)) {
+                toUpsert.add(row);
+            }
+        }
+
+        if (!toUpsert.isEmpty()) {
+            upsert toUpsert;
+        }
+        if (!toDelete.isEmpty()) {
+            delete toDelete;
+        }
+    }
+
+    private static Boolean isChanged(Attendance__c existing, Attendance__c candidate) {
+        return existing.Check_In__c != candidate.Check_In__c
+            || existing.Check_Out__c != candidate.Check_Out__c
+            || existing.Total_Hours__c != candidate.Total_Hours__c
+            || existing.Late_By_Minutes__c != candidate.Late_By_Minutes__c
+            || existing.Status__c != candidate.Status__c;
+    }
+
+    private static String deriveStatus(DayTotals totals, Shift__c shift, Set<Date> holidayDates) {
+        Integer dayOfWeek = dayOfWeekIso(totals.businessDate);
+        if (dayOfWeek == 6 || dayOfWeek == 7) {
+            return STATUS_WEEK_OFF;
+        }
+        if (holidayDates.contains(totals.businessDate)) {
+            return STATUS_HOLIDAY;
+        }
+
+        Decimal fullDay = shift != null && shift.Full_Day_Hours__c != null
+            ? shift.Full_Day_Hours__c
+            : labelAsDecimal(Label.HRMS_Default_Full_Day_Hours, 8);
+        Decimal halfDay = shift != null && shift.Half_Day_Hours__c != null
+            ? shift.Half_Day_Hours__c
+            : labelAsDecimal(Label.HRMS_Default_Half_Day_Hours, 4);
+
+        Decimal hours = totals.hoursWorked();
+        if (hours == null) {
+            // Checked in but never out: treat the day as present rather than absent,
+            // and leave the missing check-out visible in the record.
+            return STATUS_PRESENT;
+        }
+        if (hours >= fullDay) {
+            return STATUS_PRESENT;
+        }
+        if (hours >= halfDay) {
+            return STATUS_HALF_DAY;
+        }
+        return STATUS_ABSENT;
+    }
+
+    private static Map<Id, Shift__c> loadShifts(Set<Id> employeeIds, Date windowStart, Date windowEnd) {
+        Map<Id, Shift__c> shiftByEmployee = new Map<Id, Shift__c>();
+        for (Shift_Assignment__c assignment : [
+            SELECT Employee__c, Shift__r.Full_Day_Hours__c, Shift__r.Half_Day_Hours__c,
+                   Shift__r.Start_Time__c, Shift__r.Grace_Period_Minutes__c
+            FROM Shift_Assignment__c
+            WHERE Employee__c IN :employeeIds
+              AND Shift__c != NULL
+              AND (Effective_From__c = NULL OR Effective_From__c <= :windowEnd)
+              AND (Effective_To__c = NULL OR Effective_To__c >= :windowStart)
+            ORDER BY Effective_From__c ASC NULLS FIRST
+        ]) {
+            shiftByEmployee.put(assignment.Employee__c, assignment.Shift__r);
+        }
+        return shiftByEmployee;
+    }
+
+    private static Set<Date> loadHolidays(Date windowStart, Date windowEnd) {
+        Set<Date> holidayDates = new Set<Date>();
+        for (Holiday__c holiday : [
+            SELECT Date__c FROM Holiday__c
+            WHERE Date__c >= :windowStart AND Date__c <= :windowEnd
+        ]) {
+            if (holiday.Date__c != null) {
+                holidayDates.add(holiday.Date__c);
+            }
+        }
+        return holidayDates;
+    }
+
+    /** Converts an instant to the calendar date it falls on in the business time zone. */
+    @TestVisible
+    private static Date toBusinessDate(DateTime instant) {
+        return Date.valueOf(instant.format('yyyy-MM-dd', businessTimeZone()));
+    }
+
+    /** ISO day of week: Monday is 1, Sunday is 7. */
+    @TestVisible
+    private static Integer dayOfWeekIso(Date value) {
+        // 1900-01-01 was a Monday, so the day count modulo 7 gives the ISO weekday.
+        Integer offset = Math.mod(Date.newInstance(1900, 1, 1).daysBetween(value), 7);
+        return offset + 1;
+    }
+
+    private static String buildKey(Id employeeId, Date businessDate) {
+        return String.valueOf(employeeId) + '|' + String.valueOf(businessDate);
+    }
+
+    @TestVisible
+    private static Boolean isCheckIn(String punchType) {
+        return punchType != null && CHECK_IN_ALIASES.contains(punchType.toLowerCase().trim());
+    }
+
+    /** Accumulates the punches for a single employee-day. */
+    private class DayTotals {
+        private Id employeeId;
+        private Date businessDate;
+        private DateTime firstCheckIn;
+        private DateTime lastCheckOut;
+
+        private DayTotals(Id employeeId, Date businessDate) {
+            this.employeeId = employeeId;
+            this.businessDate = businessDate;
+        }
+
+        private void apply(Attendance_Punch__c punch) {
+            if (isCheckIn(punch.Punch_Type__c)) {
+                if (firstCheckIn == null || punch.Punch_DateTime__c < firstCheckIn) {
+                    firstCheckIn = punch.Punch_DateTime__c;
+                }
+            } else {
+                if (lastCheckOut == null || punch.Punch_DateTime__c > lastCheckOut) {
+                    lastCheckOut = punch.Punch_DateTime__c;
+                }
+            }
+        }
+
+        private Boolean hasAnyPunch() {
+            return firstCheckIn != null || lastCheckOut != null;
+        }
+
+        private Decimal hoursWorked() {
+            if (firstCheckIn == null || lastCheckOut == null || lastCheckOut < firstCheckIn) {
+                return null;
+            }
+            Long millis = lastCheckOut.getTime() - firstCheckIn.getTime();
+            return (Decimal.valueOf(millis) / 3600000).setScale(2);
+        }
+
+        private Decimal lateMinutes(Shift__c shift, String timeZoneName) {
+            if (firstCheckIn == null) {
+                return null;
+            }
+            String startText = shift != null && String.isNotBlank(shift.Start_Time__c)
+                ? shift.Start_Time__c
+                : Label.HRMS_Default_Shift_Start;
+            Decimal grace = shift != null && shift.Grace_Period_Minutes__c != null
+                ? shift.Grace_Period_Minutes__c
+                : labelAsDecimal(Label.HRMS_Default_Grace_Minutes, 15);
+
+            Integer startMinutes = parseHoursMinutes(startText);
+            if (startMinutes == null) {
+                return null;
+            }
+
+            String arrival = firstCheckIn.format('HH:mm', timeZoneName);
+            Integer arrivalMinutes = parseHoursMinutes(arrival);
+            if (arrivalMinutes == null) {
+                return null;
+            }
+
+            Decimal late = arrivalMinutes - startMinutes - grace;
+            return late > 0 ? late : 0;
+        }
+    }
+
+    /** Parses "HH:mm" into minutes past midnight, or null when unparseable. */
+    @TestVisible
+    private static Integer parseHoursMinutes(String value) {
+        if (String.isBlank(value)) {
+            return null;
+        }
+        List<String> parts = value.trim().split(':');
+        if (parts.size() < 2) {
+            return null;
+        }
+        try {
+            Integer hours = Integer.valueOf(parts[0].trim());
+            Integer minutes = Integer.valueOf(parts[1].trim());
+            if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
+                return null;
+            }
+            return hours * 60 + minutes;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+}

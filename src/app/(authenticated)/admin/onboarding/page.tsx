@@ -22,22 +22,24 @@ interface TemplateTask {
 export default function OnboardingAdmin() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
-    fetchTemplates();
+    // `ignore` discards a response that arrives after the effect was cleaned
+    // up or superseded, which otherwise sets state on an unmounted component
+    // and can apply an older response over a newer one.
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/onboarding/templates");
+        const data = await res.json();
+        if (!ignore && res.ok) setTemplates(data.templates || []);
+      } catch (err) {
+        if (!ignore) console.error(err);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
   }, []);
-
-  const fetchTemplates = async () => {
-    try {
-      const res = await fetch("/api/onboarding/templates");
-      const data = await res.json();
-      if (res.ok) setTemplates(data.templates || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="space-y-6">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
 import { assertSalesforceId } from "@/lib/soql";
+import { safeErrorMessage } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();
@@ -17,7 +18,7 @@ export async function GET() {
       ORDER BY Start_Date__c DESC
     `);
     return NextResponse.json({ loans });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Loans GET]", err);
     return NextResponse.json({ error: "Failed to fetch loans" }, { status: 500 });
   }
@@ -54,8 +55,8 @@ export async function POST(req: Request) {
       Status__c: "Active",
     });
     return NextResponse.json({ id, message: "Loan created" }, { status: 201 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Loans POST]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: safeErrorMessage(err, "Request failed") }, { status: 500 });
   }
 }

@@ -16,7 +16,7 @@ export async function GET() {
       LIMIT 200
     `);
     return NextResponse.json({ assets });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Admin Assets GET]", err);
     return NextResponse.json({ error: "Failed to fetch assets" }, { status: 500 });
   }

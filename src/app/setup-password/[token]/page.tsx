@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { use } from "react";
 
 export default function SetupPasswordPage({ params }: { params: Promise<{ token: string }> }) {

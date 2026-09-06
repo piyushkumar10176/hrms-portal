@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getMonthlyAttendance } from "@/lib/salesforce-queries";
+import { getMonthlyAttendance } from "@/lib/salesforce-queries";
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -13,7 +14,7 @@ export async function GET(req: NextRequest) {
   try {
     const targetId = session.user.role === "admin" && searchParams.get("employeeId") 
       ? searchParams.get("employeeId")! 
-      : (await getEmployeeByEmail(session.user.email)).Id;
+      : (await getSessionEmployee(session)).Id;
     
     const sfRecords = await getMonthlyAttendance(targetId, year, month + 1); // JS month is 0-indexed, SF expects 1-12
     const records = sfRecords.map(r => ({
@@ -32,6 +33,9 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ records, summary: { present, absent, leaves, total: records.length }, source: "salesforce" });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce monthly attendance fetch error:", err);
     return NextResponse.json({ error: "Failed to fetch attendance records" }, { status: 500 });
   }

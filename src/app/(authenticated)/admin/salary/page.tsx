@@ -7,7 +7,6 @@ interface SalaryRow { employeeId:string; employeeName:string; designation:string
 export default function SalaryPage() {
   const { data:session } = useSession();
   const [salaries, setSalaries] = useState<SalaryRow[]>([]);
-  const [employees, setEmployees] = useState<{id:string;firstName:string;lastName:string;designation:string}[]>([]);
   const [editing, setEditing] = useState<string|null>(null);
   const [form, setForm] = useState({basic:0,hra:0,conveyance:0,medical:0,special:0,effectiveFrom:""});
   const [msg, setMsg] = useState<{text:string;type:"success"|"error"}|null>(null);
@@ -17,7 +16,6 @@ export default function SalaryPage() {
   useEffect(() => {
     if(!isAdmin) return;
     fetch("/api/salary").then(r=>r.json()).then(d=>setSalaries(d.salaries||[]));
-    fetch("/api/employees").then(r=>r.json()).then(d=>setEmployees(d.employees||[]));
   }, [isAdmin]);
 
   const fmt = (n:number) => `₹${n.toLocaleString("en-IN")}`;

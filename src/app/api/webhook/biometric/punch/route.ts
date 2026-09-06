@@ -7,6 +7,20 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { timingSafeEqual } from "node:crypto";
+
+/** Constant-time secret comparison. Length is compared first, via a hash, so
+ *  unequal lengths do not short-circuit the byte comparison. */
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = Buffer.from(provided, "utf8");
+  const b = Buffer.from(expected, "utf8");
+  if (a.length !== b.length) {
+    // Still burn a comparison of equal-length buffers to keep timing flat.
+    timingSafeEqual(a, a);
+    return false;
+  }
+  return timingSafeEqual(a, b);
+}
 
 export async function POST(req: NextRequest) {
   const expectedSecret = process.env.BIOMETRIC_WEBHOOK_SECRET;
@@ -19,9 +33,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate webhook secret
+  // Validate webhook secret with a constant-time comparison so response timing
+  // cannot be used to recover the secret one character at a time.
   const providedSecret = req.headers.get("x-webhook-secret");
-  if (providedSecret !== expectedSecret) {
+  if (!providedSecret || !secretsMatch(providedSecret, expectedSecret)) {
     return NextResponse.json(
       { error: "Invalid webhook secret" },
       { status: 401 }

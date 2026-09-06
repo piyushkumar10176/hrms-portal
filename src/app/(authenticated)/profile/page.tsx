@@ -28,11 +28,11 @@ export default function ProfilePage() {
   const [pwMsg, setPwMsg] = useState<{text:string;type:"success"|"error"}|null>(null);
   const [msg, setMsg] = useState<{text:string;type:"success"|"error"}|null>(null);
 
-  useEffect(() => {
-    fetchProfile();
-  }, [session?.user?.id]);
 
-  const fetchProfile = () => {
+  const employeeId = session?.user?.id;
+
+  useEffect(() => {
+    if (!employeeId) return;
     fetch("/api/employees/me").then(r=>r.json()).then(d=>{
       if(d.employee) {
         setEmp(d.employee);
@@ -41,10 +41,11 @@ export default function ProfilePage() {
       if(d.history) setHistory(d.history);
     });
     fetch("/api/org").then(r=>r.json()).then(d=>{
-      const me = d.employees?.find((e:any)=>e.id===session?.user?.id);
+      const me = d.employees?.find((e: { id: string })=>e.id===employeeId);
       if(me?.managerName) setManagerName(me.managerName);
     }).catch(()=>{});
-  };
+  
+  }, [employeeId]);
 
   const handleSaveProfile = async () => {
     const res = await fetch("/api/employees/me", {
@@ -155,7 +156,7 @@ export default function ProfilePage() {
         <div className="p-6">
           {history.length > 0 ? (
             <div className="space-y-6 relative before:absolute before:inset-0 before:ml-4 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-gray-300 before:to-transparent">
-              {history.map((h, i) => (
+              {history.map((h) => (
                 <div key={h.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
                   <div className={`flex items-center justify-center w-8 h-8 rounded-full border-4 border-white shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2 shadow ${h.type === "Joining" ? "bg-green-500" : h.type === "Promotion" ? "bg-indigo-500" : h.type === "Salary Revision" ? "bg-amber-500" : h.type === "Clock In" ? "bg-teal-500" : h.type === "Clock Out" ? "bg-rose-400" : h.type === "Leave Approved" ? "bg-sky-500" : "bg-blue-500"}`}>
                     <span className="text-[10px]">

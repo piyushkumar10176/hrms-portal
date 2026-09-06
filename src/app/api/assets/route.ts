@@ -16,7 +16,7 @@ export async function GET() {
       ORDER BY Name ASC
     `);
     return NextResponse.json({ assets });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Assets GET]", err);
     return NextResponse.json({ error: "Failed to fetch assets" }, { status: 500 });
   }

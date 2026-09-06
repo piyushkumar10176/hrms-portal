@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail } from "@/lib/salesforce-queries";
-import { updateRecord } from "@/lib/salesforce";
+import { updateRecord, extractValidationMessage } from "@/lib/salesforce";
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
     // Attempt to fetch from Salesforce
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     
     // Map Salesforce fields to the frontend Employee interface
     const emp = {
@@ -42,6 +42,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ employee: emp, history });
 
   } catch (error) {
+    if (error instanceof StaleSessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Salesforce fetch error:", error);
     return NextResponse.json({ error: "Not found or error fetching profile" }, { status: 500 });
   }
@@ -54,7 +57,7 @@ export async function PUT(req: NextRequest) {
   const body = await req.json();
   
   // Restrict what an employee can self-edit and map to SF fields
-  const allowedUpdates: Record<string, any> = {};
+  const allowedUpdates: Record<string, unknown> = {};
   if (body.phone !== undefined) allowedUpdates.Mobile__c = body.phone;
   if (body.dateOfBirth !== undefined) allowedUpdates.DOB__c = body.dateOfBirth;
   if (body.gender !== undefined) allowedUpdates.Gender__c = body.gender;
@@ -69,11 +72,11 @@ export async function PUT(req: NextRequest) {
   }
 
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     await updateRecord("Employee__c", sfEmp.Id, allowedUpdates);
     
     // Fetch fresh employee data to return
-    const updatedSfEmp = await getEmployeeByEmail(session.user.email);
+    const updatedSfEmp = await getSessionEmployee(session);
     
     const emp = {
       id: updatedSfEmp.Id,
@@ -100,7 +103,14 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ employee: emp }, { status: 200 });
   } catch (error) {
+    if (error instanceof StaleSessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Salesforce update error:", error);
+    const validation = extractValidationMessage(error);
+    if (validation) {
+      return NextResponse.json({ error: validation }, { status: 400 });
+    }
     return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
 import { assertSalesforceId } from "@/lib/soql";
+import { safeErrorMessage } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();
@@ -17,7 +18,7 @@ export async function GET() {
       LIMIT 50
     `);
     return NextResponse.json({ reimbursements });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Reimbursements GET]", err);
     return NextResponse.json({ error: "Failed to fetch reimbursements" }, { status: 500 });
   }
@@ -37,8 +38,8 @@ export async function POST(req: Request) {
       Status__c: "Submitted",
     });
     return NextResponse.json({ id, message: "Reimbursement submitted" }, { status: 201 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Reimbursements POST]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: safeErrorMessage(err, "Request failed") }, { status: 500 });
   }
 }

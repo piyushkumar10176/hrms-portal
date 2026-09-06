@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { Bell, Search, LogOut, ChevronDown, CheckCircle2 } from "lucide-react";
+import { Bell, Search, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -43,7 +43,7 @@ export function Header() {
       });
       setUnreadCount(0);
       setNotifications(prev => prev.map(n => ({ ...n, read: true })));
-    } catch (e) {}
+    } catch {}
   };
 
   const userInitials = session?.user?.name

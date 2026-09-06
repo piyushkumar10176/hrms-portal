@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomLabels xmlns="http://soap.sforce.com/2006/04/metadata">
+    <labels>
+        <fullName>HRMS_Business_Time_Zone</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>HRMS business time zone</shortDescription>
+        <value>Asia/Kolkata</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Default_Full_Day_Hours</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Hours worked that count as a full day when no shift is assigned</shortDescription>
+        <value>8</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Default_Half_Day_Hours</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Hours worked that count as a half day when no shift is assigned</shortDescription>
+        <value>4</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Default_Shift_Start</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Shift start time HH:mm used for lateness when no shift is assigned</shortDescription>
+        <value>09:30</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Default_Grace_Minutes</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Grace minutes after shift start before an arrival counts as late</shortDescription>
+        <value>15</value>
+    </labels>
+</CustomLabels>

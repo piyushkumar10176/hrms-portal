@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail } from "@/lib/salesforce-queries";
 import { getSalesforceConnection } from "@/lib/salesforce";
 import { assertSalesforceId } from "@/lib/soql";
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,7 @@ export async function GET() {
 
   try {
     const conn = await getSalesforceConnection();
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
 
     const query = `
       SELECT Id, Message__c, Is_Read__c, Type__c, CreatedDate
@@ -21,7 +21,14 @@ export async function GET() {
       ORDER BY CreatedDate DESC
       LIMIT 20
     `;
-    const sfRecords = (await conn.query(query)).records as any[];
+    interface NotificationRow {
+      Id: string;
+      Message__c?: string | null;
+      Is_Read__c?: boolean | null;
+      Type__c?: string | null;
+      CreatedDate?: string;
+    }
+    const sfRecords = (await conn.query(query)).records as unknown as NotificationRow[];
 
     const notifications = sfRecords.map(r => ({
       id: r.Id,
@@ -35,6 +42,9 @@ export async function GET() {
 
     return NextResponse.json({ notifications, unreadCount, source: "salesforce" });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     // Previously this returned an empty list, so a broken query left the bell
     // permanently empty with no signal to anyone. Surface it instead.
     console.error("Salesforce getNotifications error:", err);
@@ -51,12 +61,12 @@ export async function POST(req: NextRequest) {
 
   try {
     const conn = await getSalesforceConnection();
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
 
     const body = await req.json();
     if (body.action === "markAllRead") {
       const query = `SELECT Id FROM Notification__c WHERE Employee__c = '${assertSalesforceId(sfEmp.Id)}' AND Is_Read__c = false`;
-      const unread = (await conn.query(query)).records as any[];
+      const unread = (await conn.query(query)).records as unknown as { Id: string }[];
       if (unread.length > 0) {
         const toUpdate = unread.map(r => ({ Id: r.Id, Is_Read__c: true }));
         await conn.update("Notification__c", toUpdate);
@@ -65,6 +75,9 @@ export async function POST(req: NextRequest) {
     
     return NextResponse.json({ success: true });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce markAllRead error:", err);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }

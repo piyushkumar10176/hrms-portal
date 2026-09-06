@@ -4,4 +4,8 @@
     <label>Employee Code</label>
     <type>Text</type>
     <length>50</length>
+    <unique>true</unique>
+    <caseSensitive>false</caseSensitive>
+    <externalId>true</externalId>
+    <description>Unique employee code. Marked unique after two employees were found sharing EMP001, and as an external id so integrations can upsert by code.</description>
 </CustomField>

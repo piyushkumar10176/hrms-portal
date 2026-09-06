@@ -20,14 +20,14 @@ export default function ExpensesPage() {
 
   useEffect(() => { if (session) fetchReports(); }, [session]);
 
-  const fetchReports = async () => {
+  async function fetchReports() {
     try {
       const res = await fetch("/api/expenses");
       const data = await res.json();
       if (res.ok) setReports(data.reports || []);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
-  };
+  }
 
   const handleSubmit = async () => {
     if (!form.title) { setMsg({ text: "Title is required", type: "error" }); return; }

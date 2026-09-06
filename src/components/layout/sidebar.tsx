@@ -4,23 +4,7 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import {
-  Home,
-  User,
-  Inbox,
-  Users,
-  DollarSign,
-  Building2,
-  MessageSquare,
-  Clock,
-  PalmtreeIcon,
-  ChevronRight,
-  ChevronLeft,
-  CheckSquare,
-  Settings,
-  Receipt,
-  Package
-} from "lucide-react";
+import { Home, User, Inbox, DollarSign, Building2, ChevronRight, ChevronLeft, Settings, Package } from "lucide-react";
 import { useSession } from "next-auth/react";
 
 const baseNavigation = [

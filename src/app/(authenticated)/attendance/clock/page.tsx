@@ -1,20 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useClock } from "@/hooks/use-clock";
 
 export default function ClockPage() {
-  const [mounted, setMounted] = useState(false);
-  const [time, setTime] = useState(new Date());
+  const time = useClock();
   const [today, setToday] = useState<{ clockIn: string | null; clockOut: string | null; status: string; totalHours: number } | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-
-  useEffect(() => { setMounted(true); }, []);
-  useEffect(() => {
-    if (!mounted) return;
-    const timer = setInterval(() => setTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, [mounted]);
 
   useEffect(() => {
     fetch("/api/attendance/punch").then(r => r.json()).then(d => setToday(d.today)).catch(() => {});
@@ -50,10 +43,10 @@ export default function ClockPage() {
       <div className="bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl p-8 text-center text-white">
         <p className="text-sm opacity-80">Current Time</p>
         <p className="text-5xl font-bold tabular-nums mt-2" suppressHydrationWarning>
-          {mounted ? time.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"}
+          {time ? time.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "--:--:--"}
         </p>
         <p className="text-sm opacity-80 mt-2" suppressHydrationWarning>
-          {mounted ? time.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Loading..."}
+          {time ? time.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "Loading..."}
         </p>
       </div>
 

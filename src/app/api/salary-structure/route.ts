@@ -18,7 +18,7 @@ export async function GET() {
       LIMIT 5
     `);
     return NextResponse.json({ structures });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Salary Structure GET]", err);
     return NextResponse.json({ error: "Failed to fetch salary structures" }, { status: 500 });
   }

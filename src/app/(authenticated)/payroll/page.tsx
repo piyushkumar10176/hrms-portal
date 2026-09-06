@@ -34,7 +34,8 @@ function PayrollContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setLoading(true);
+    // loading already initialises to true; setting it here again was a
+    // synchronous setState inside the effect and a redundant render.
     fetch("/api/payroll").then(r => r.json()).then(d => {
       setPayslips(d.payslips || []);
       setLatest(d.latest || null);

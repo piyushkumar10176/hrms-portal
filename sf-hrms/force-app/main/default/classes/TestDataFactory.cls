@@ -107,4 +107,38 @@ public with sharing class TestDataFactory {
             Status__c = status
         );
     }
+
+    /**
+     * @param employee the employee punching
+     * @param punchTime the punch instant
+     * @param punchType "Check-In" or "Check-Out"
+     * @return an uninserted punch
+     */
+    public static Attendance_Punch__c buildPunch(
+        Employee__c employee,
+        DateTime punchTime,
+        String punchType
+    ) {
+        return new Attendance_Punch__c(
+            Employee__c = employee.Id,
+            Punch_DateTime__c = punchTime,
+            Punch_Type__c = punchType,
+            Source__c = 'Test'
+        );
+    }
+
+    /**
+     * Builds an instant from a date and an Asia/Kolkata wall-clock time.
+     * IST is UTC+5:30 with no daylight saving, so the offset is constant.
+     *
+     * @param day the business date
+     * @param hour hour in IST
+     * @param minute minute in IST
+     * @return the equivalent instant
+     */
+    public static DateTime istInstant(Date day, Integer hour, Integer minute) {
+        Integer totalMinutes = hour * 60 + minute - 330;
+        DateTime midnightUtc = DateTime.newInstanceGmt(day, Time.newInstance(0, 0, 0, 0));
+        return midnightUtc.addMinutes(totalMinutes);
+    }
 }

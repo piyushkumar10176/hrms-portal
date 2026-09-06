@@ -11,17 +11,24 @@ export default function AdminAssetsPage() {
   const [assets, setAssets] = useState<Asset[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("All");
-
-  useEffect(() => { fetchAssets(); }, []);
-
-  const fetchAssets = async () => {
-    try {
-      const res = await fetch("/api/admin/assets");
-      const data = await res.json();
-      if (res.ok) setAssets(data.assets || []);
-    } catch (err) { console.error(err); }
-    finally { setLoading(false); }
-  };
+  useEffect(() => {
+    // `ignore` discards a response that arrives after the effect was cleaned
+    // up or superseded, which otherwise sets state on an unmounted component
+    // and can apply an older response over a newer one.
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/assets");
+        const data = await res.json();
+        if (!ignore && res.ok) setAssets(data.assets || []);
+      } catch (err) {
+        if (!ignore) console.error(err);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, []);
 
   const filtered = filter === "All" ? assets : assets.filter(a => a.Status__c === filter);
 

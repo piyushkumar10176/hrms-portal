@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getTodayPunches, createPunch as sfCreatePunch, createHistoryRecord, getEmployeeByEmail } from "@/lib/salesforce-queries";
+import { getTodayPunches, createPunch as sfCreatePunch, createHistoryRecord } from "@/lib/salesforce-queries";
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     const punches = await getTodayPunches(sfEmp.Id);
     
     // Check for the most recent punches today
@@ -25,6 +26,9 @@ export async function GET() {
       return NextResponse.json({ today: null });
     }
   } catch (error) {
+    if (error instanceof StaleSessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Salesforce punch fetch error:", error);
     return NextResponse.json({ error: "Failed to fetch punches" }, { status: 500 });
   }
@@ -46,8 +50,36 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     const punchType = action === "clockIn" ? "Check-In" : "Check-Out";
+
+    // Sequence check. Punches previously had no ordering rules, so an employee
+    // could clock in twice in a row, or clock out having never clocked in, and
+    // the daily rollup would then derive nonsense hours from the pair.
+    const todaysPunches = await getTodayPunches(sfEmp.Id);
+    const lastPunch = todaysPunches.length ? todaysPunches[todaysPunches.length - 1] : null;
+    const lastWasCheckIn = lastPunch
+      ? (lastPunch.Punch_Type__c || "").toLowerCase().replace(/[^a-z]/g, "") === "checkin"
+      : false;
+
+    if (action === "clockIn" && lastWasCheckIn) {
+      return NextResponse.json(
+        { error: "You are already clocked in. Clock out before clocking in again." },
+        { status: 409 }
+      );
+    }
+    if (action === "clockOut" && !lastPunch) {
+      return NextResponse.json(
+        { error: "You have not clocked in today." },
+        { status: 409 }
+      );
+    }
+    if (action === "clockOut" && !lastWasCheckIn) {
+      return NextResponse.json(
+        { error: "You are already clocked out. Clock in before clocking out again." },
+        { status: 409 }
+      );
+    }
     
     await sfCreatePunch({
       employeeId: sfEmp.Id,
@@ -75,6 +107,9 @@ export async function POST(req: NextRequest) {
       message: `Clocked ${action === "clockIn" ? "in" : "out"} successfully` 
     });
   } catch (error) {
+    if (error instanceof StaleSessionError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
     console.error("Salesforce punch create error:", error);
     return NextResponse.json({ error: "Failed to save punch" }, { status: 500 });
   }

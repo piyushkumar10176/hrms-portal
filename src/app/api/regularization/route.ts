@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
 import { assertSalesforceId } from "@/lib/soql";
+import { safeErrorMessage } from "@/lib/api-error";
 
 // GET: Fetch regularization requests for the logged-in employee
 export async function GET() {
@@ -18,7 +19,7 @@ export async function GET() {
       LIMIT 50
     `);
     return NextResponse.json({ requests });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Regularization GET]", err);
     return NextResponse.json({ error: "Failed to fetch requests" }, { status: 500 });
   }
@@ -37,7 +38,7 @@ export async function POST(req: Request) {
     }
 
     // Get the employee's reporting manager for approver
-    const employees = await query<any>(`
+    const employees = await query<{ Id: string; Reporting_Manager__c: string | null }>(`
       SELECT Id, Reporting_Manager__c FROM Employee__c WHERE Id = '${assertSalesforceId(session.user.id)}'
     `);
     const emp = employees[0];
@@ -53,8 +54,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json({ id: recordId, message: "Regularization request submitted" }, { status: 201 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Regularization POST]", err);
-    return NextResponse.json({ error: err.message || "Failed to submit request" }, { status: 500 });
+    return NextResponse.json({ error: safeErrorMessage(err, "Failed to submit request") }, { status: 500 });
   }
 }

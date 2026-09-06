@@ -11,7 +11,7 @@
  * Used exclusively in Next.js API Routes (server-side only).
  */
 
-import jsforce, { Connection } from "jsforce";
+import { Connection } from "jsforce";
 
 // ============================================
 // Connection Management
@@ -252,7 +252,7 @@ export async function refreshConnection(): Promise<Connection> {
 /**
  * Execute a SOQL query with automatic retry on session expiry.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 export async function query<T>(soql: string): Promise<T[]> {
   const conn = await getSalesforceConnection();
 
@@ -419,6 +419,47 @@ export async function submitForApproval(
 // ============================================
 // Error Handling
 // ============================================
+
+/**
+ * Extracts the human-readable part of a Salesforce validation failure.
+ *
+ * Validation rules (PAN format, Aadhaar length, self-manage, and so on) surface
+ * as FIELD_CUSTOM_VALIDATION_EXCEPTION. Routes previously swallowed these into a
+ * generic "Failed to update", so the employee never learned what was wrong.
+ */
+export function extractValidationMessage(error: unknown): string | null {
+  const candidates: string[] = [];
+  const err = error as { message?: string; errors?: unknown };
+
+  if (typeof err?.message === "string") candidates.push(err.message);
+  if (Array.isArray(err?.errors)) {
+    for (const e of err.errors as Array<{ message?: string }>) {
+      if (typeof e?.message === "string") candidates.push(e.message);
+    }
+  }
+
+  // Salesforce formats these as "CODE, the readable message: [Field__c, Other__c]".
+  const CODES = [
+    "FIELD_CUSTOM_VALIDATION_EXCEPTION",
+    "REQUIRED_FIELD_MISSING",
+    "DUPLICATE_VALUE",
+    "STRING_TOO_LONG",
+    "INVALID_EMAIL_ADDRESS",
+    "FIELD_INTEGRITY_EXCEPTION",
+  ];
+
+  for (const raw of candidates) {
+    for (const code of CODES) {
+      const at = raw.indexOf(code);
+      if (at === -1) continue;
+      let rest = raw.slice(at + code.length).replace(/^\s*[,:]\s*/, "");
+      // Drop the trailing field list Salesforce appends.
+      rest = rest.replace(/\s*:\s*\[[^\]]*\]\s*$/, "").trim();
+      if (rest) return rest;
+    }
+  }
+  return null;
+}
 
 export class SalesforceError extends Error {
   code: string;

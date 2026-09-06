@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getEmployeeByEmail, getLeaveRequests, createLeaveRequest, getLeaveTypes, getLeaveBalances, getHolidays } from '@/lib/salesforce-queries';
+import { getLeaveRequests, createLeaveRequest, getLeaveTypes, getLeaveBalances, getHolidays } from '@/lib/salesforce-queries';
 import { countWorkingDays, parseISODate } from '@/lib/leave-days';
 import { availableDays } from '@/lib/leave-balance';
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export const dynamic = 'force-dynamic';
 
@@ -11,7 +12,7 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     const sfRequests = await getLeaveRequests(sfEmp.Id);
     
     const requests = sfRequests.map(r => ({
@@ -27,6 +28,9 @@ export async function GET() {
     
     return NextResponse.json({ requests, source: "salesforce" });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce getLeaveRequests error:", err);
     return NextResponse.json({ error: "Failed to fetch leave requests" }, { status: 500 });
   }
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     const sfLeaveTypes = await getLeaveTypes();
     const sfType = sfLeaveTypes.find(t => t.Name === leaveType);
 
@@ -121,6 +125,9 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce createLeaveRequest error:", err);
     return NextResponse.json({ error: "Failed to submit leave request" }, { status: 500 });
   }

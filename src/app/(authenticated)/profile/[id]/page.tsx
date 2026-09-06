@@ -27,7 +27,7 @@ export default function EmployeeProfilePage() {
     }).catch(()=>{});
 
     fetch("/api/org").then(r=>r.json()).then(d=>{
-      const me = d.employees?.find((e:any)=>e.id===empId);
+      const me = d.employees?.find((e: { id: string })=>e.id===empId);
       if(me?.managerName) setManagerName(me.managerName);
     }).catch(()=>{});
   }, [empId]);

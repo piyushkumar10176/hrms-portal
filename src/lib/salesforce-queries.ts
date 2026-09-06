@@ -10,12 +10,14 @@
 
 import { query, queryOne, queryOneOrNull, createRecord } from "./salesforce";
 import { assertSalesforceId, escapeSoqlString } from "./soql";
+import { businessToday } from "./business-time";
 
 // ============================================
 // Type Definitions (mirror Salesforce objects)
 // ============================================
 
 export interface SFEmployee {
+  Password_Changed_At__c?: string | null;
   Id: string;
   Name: string;
   Employee_Code__c: string;
@@ -141,6 +143,7 @@ export async function getEmployeeByEmail(email: string): Promise<SFEmployee> {
            Reporting_Manager__c, Reporting_Manager__r.Name, 
            Reporting_Manager__r.Id, Reporting_Manager__r.Official_Email__c,
            PAN__c, Aadhaar__c, Bank_Account_Number__c, Bank_Name__c, IFSC_Code__c,
+           Password_Changed_At__c,
            Department_Ref__c, Department_Ref__r.Name, Department_Ref__r.Code__c,
            Designation_Ref__c, Designation_Ref__r.Name, Designation_Ref__r.Code__c,
            Employment_Type__c, Probation_End_Date__c, Confirmation_Date__c, Resignation_Date__c, LWD__c
@@ -212,7 +215,9 @@ export async function getAllEmployees(): Promise<SFEmployee[]> {
  * Get today's punches for an employee.
  */
 export async function getTodayPunches(employeeId: string): Promise<SFAttendancePunch[]> {
-  const today = new Date().toISOString().split("T")[0];
+  // "Today" must be the business day in Asia/Kolkata. toISOString() yields the UTC
+  // date, which rolls over at 05:30 IST and put early-morning punches on the wrong day.
+  const today = businessToday();
   return query<SFAttendancePunch>(`
     SELECT Id, Punch_DateTime__c, Punch_Type__c, Latitude__c, 
            Longitude__c, Source__c
@@ -291,6 +296,37 @@ export async function getLeaveBalances(employeeId: string): Promise<SFLeaveBalan
 /**
  * Get all leave types.
  */
+/**
+ * Leave balances for many employees in a single query.
+ *
+ * The dashboard previously called getLeaveBalances once per direct report inside
+ * an await loop, issuing one round trip to Salesforce per report.
+ */
+export async function getLeaveBalancesForEmployees(
+  employeeIds: string[]
+): Promise<Map<string, SFLeaveBalance[]>> {
+  const grouped = new Map<string, SFLeaveBalance[]>();
+  if (employeeIds.length === 0) return grouped;
+
+  const currentYear = new Date().getFullYear().toString();
+  const idList = employeeIds.map(id => `'${assertSalesforceId(id)}'`).join(",");
+  const rows = await query<SFLeaveBalance & { Employee__c: string }>(`
+    SELECT Id, Employee__c, Leave_Type__c, Leave_Type__r.Name, Leave_Type__r.Code__c,
+           Year__c, Opening_Balance__c, Accrued__c, Availed__c, Closing_Balance__c
+    FROM Leave_Balance__c
+    WHERE Employee__c IN (${idList})
+    AND Year__c = '${currentYear}'
+    ORDER BY Leave_Type__r.Name
+  `);
+
+  for (const id of employeeIds) grouped.set(id, []);
+  for (const row of rows) {
+    const bucket = grouped.get(row.Employee__c);
+    if (bucket) bucket.push(row);
+  }
+  return grouped;
+}
+
 export async function getLeaveTypes(): Promise<SFLeaveType[]> {
   return query<SFLeaveType>(`
     SELECT Id, Name, Code__c, Annual_Quota__c, Carry_Forward_Allowed__c
@@ -365,7 +401,7 @@ export async function getPendingApprovals(managerEmployeeId: string): Promise<SF
 }
 
 export async function getPendingRegularizationApprovals(managerEmployeeId: string) {
-  return query<any>(`
+  return query<SFApprovalRequest>(`
     SELECT Id, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
            Date__c, Requested_Clock_In__c, Requested_Clock_Out__c, Reason__c,
            Status__c, CreatedDate
@@ -377,7 +413,7 @@ export async function getPendingRegularizationApprovals(managerEmployeeId: strin
 }
 
 export async function getPendingExpenseApprovals(managerEmployeeId: string) {
-  return query<any>(`
+  return query<SFApprovalRequest>(`
     SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
            Title__c, Total_Amount__c, Notes__c, Status__c, CreatedDate
     FROM Expense_Report__c
@@ -388,7 +424,7 @@ export async function getPendingExpenseApprovals(managerEmployeeId: string) {
 }
 
 export async function getPendingReimbursementApprovals(managerEmployeeId: string) {
-  return query<any>(`
+  return query<SFApprovalRequest>(`
     SELECT Id, Name, Employee__c, Employee__r.Name, Employee__r.Official_Email__c,
            Component__r.Name, Amount_Claimed__c, Status__c, CreatedDate
     FROM Reimbursement__c
@@ -691,4 +727,39 @@ export async function getPayrollCycles() {
     console.warn("Error querying Payroll_Cycle__c:", error);
     return [];
   }
+}
+
+/** Shape shared by the four request types that appear in the approvals inbox. */
+export interface SFApprovalRequest {
+  Id: string;
+  Name?: string;
+  Employee__c?: string | null;
+  Employee__r?: { Name?: string; Official_Email__c?: string } | null;
+  Approver__c?: string | null;
+  Status__c?: string | null;
+  Reason__c?: string | null;
+  Notes__c?: string | null;
+  Title__c?: string | null;
+  Total_Amount__c?: number | null;
+  Amount_Claimed__c?: number | null;
+  Component__r?: { Name?: string } | null;
+  Date__c?: string | null;
+  Requested_Clock_In__c?: string | null;
+  Requested_Clock_Out__c?: string | null;
+  Days__c?: number | null;
+  From_Date__c?: string | null;
+  To_Date__c?: string | null;
+  Leave_Type__r?: { Name?: string } | null;
+  CreatedDate?: string;
+}
+
+/** A leave day drawn on the team calendar. */
+export interface SFTeamLeaveEntry {
+  Id: string;
+  Employee__c?: string | null;
+  Employee__r?: { Name?: string } | null;
+  Leave_Type__r?: { Name?: string } | null;
+  From_Date__c?: string | null;
+  To_Date__c?: string | null;
+  Status__c?: string | null;
 }

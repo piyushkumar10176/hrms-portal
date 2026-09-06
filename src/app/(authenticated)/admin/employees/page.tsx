@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useSession } from "next-auth/react";
 
 interface Employee {
@@ -38,7 +38,7 @@ export default function AdminEmployeesPage() {
   const isAdmin = session?.user?.role === "admin";
   const userId = session?.user?.id;
 
-  const fetchEmployees = () => {
+  const fetchEmployees = useCallback(() => {
     fetch("/api/employees").then(r => r.json()).then(d => {
       if (d.error) {
         setMsg({ text: `Connection Error: ${d.error} - Salesforce may be temporarily unavailable.`, type: "error" });
@@ -51,15 +51,15 @@ export default function AdminEmployeesPage() {
       }
       setEmployees(emps);
     });
-  };
+  }, [isAdmin, userId]);
 
-  const fetchDepartments = () => {
+  const fetchDepartments = useCallback(() => {
     fetch("/api/departments").then(r => r.json()).then(d => setDepartments((d.departments || []).filter((dep: Department) => dep.status === "Active")));
-  };
+  }, []);
 
-  const fetchDesignations = () => {
+  const fetchDesignations = useCallback(() => {
     fetch("/api/designations").then(r => r.json()).then(d => setDesignations((d.designations || []).filter((des: Designation) => des.status === "Active")));
-  };
+  }, []);
 
   useEffect(() => {
     if (session) {
@@ -67,7 +67,7 @@ export default function AdminEmployeesPage() {
       fetchDepartments();
       fetchDesignations();
     }
-  }, [session]);
+  }, [session, fetchEmployees, fetchDepartments, fetchDesignations]);
 
   const handleSave = async () => {
     if (!form.firstName || !form.lastName || !form.email) {

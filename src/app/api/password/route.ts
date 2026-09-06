@@ -26,7 +26,13 @@ export async function POST(req: NextRequest) {
 
     // Hash new password and update in SF
     const newHash = hashSync(newPassword, 10);
-    await updateRecord("Employee__c", emp.Id, { Password_Hash__c: newHash });
+    await updateRecord("Employee__c", emp.Id, {
+      Password_Hash__c: newHash,
+      // Stamping this signs out sessions issued before the change.
+      Password_Changed_At__c: new Date().toISOString(),
+      Failed_Login_Attempts__c: 0,
+      Lockout_Until__c: null,
+    });
 
     return NextResponse.json({ message: "Password changed successfully" });
   } catch (err) {

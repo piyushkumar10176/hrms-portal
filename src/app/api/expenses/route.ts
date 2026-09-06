@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { query, createRecord } from "@/lib/salesforce";
 import { auth } from "@/lib/auth";
 import { assertSalesforceId } from "@/lib/soql";
+import { safeErrorMessage } from "@/lib/api-error";
 
 export async function GET() {
   const session = await auth();
@@ -19,7 +20,7 @@ export async function GET() {
       LIMIT 50
     `);
     return NextResponse.json({ reports });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Expenses GET]", err);
     return NextResponse.json({ error: "Failed to fetch expenses" }, { status: 500 });
   }
@@ -31,7 +32,7 @@ export async function POST(req: Request) {
 
   try {
     const body = await req.json();
-    const emps = await query<any>(`SELECT Reporting_Manager__c FROM Employee__c WHERE Id = '${assertSalesforceId(session.user.id)}'`);
+    const emps = await query<{ Reporting_Manager__c: string | null }>(`SELECT Reporting_Manager__c FROM Employee__c WHERE Id = '${assertSalesforceId(session.user.id)}'`);
     const mgr = emps[0]?.Reporting_Manager__c || null;
 
     const id = await createRecord("Expense_Report__c", {
@@ -43,8 +44,8 @@ export async function POST(req: Request) {
       Notes__c: body.notes || null,
     });
     return NextResponse.json({ id, message: "Expense report created" }, { status: 201 });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Expenses POST]", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({ error: safeErrorMessage(err, "Request failed") }, { status: 500 });
   }
 }

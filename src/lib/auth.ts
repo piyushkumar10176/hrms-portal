@@ -9,12 +9,19 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
-import { queryOneOrNull } from "./salesforce";
+import { queryOneOrNull, updateRecord } from "./salesforce";
+import { escapeSoqlString } from "./soql";
 import { authConfig } from "./auth.config";
+
+/** Consecutive failures before the account is locked. */
+const MAX_FAILED_ATTEMPTS = 5;
+/** How long a locked account stays locked. */
+const LOCKOUT_MINUTES = 15;
 
 declare module "next-auth" {
   interface User {
     employeeId?: string;
+    passwordChangedAt?: string;
     role?: string;
     department?: string;
     firstName?: string;
@@ -23,6 +30,7 @@ declare module "next-auth" {
   interface Session {
     user: {
       id: string;
+      passwordChangedAt?: string;
       email: string;
       name: string;
       employeeId: string;
@@ -36,6 +44,7 @@ declare module "next-auth" {
 declare module "@auth/core/jwt" {
   interface JWT {
     employeeId?: string;
+    passwordChangedAt?: string;
     role?: string;
     department?: string;
   }
@@ -73,18 +82,56 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             Department_Ref__c?: string;
             Department_Ref__r?: { Name: string };
             Employee_Status__c: string;
+            Failed_Login_Attempts__c?: number | null;
+            Lockout_Until__c?: string | null;
+            Password_Changed_At__c?: string | null;
           }>(`
             SELECT Id, Official_Email__c, Password_Hash__c, First_Name__c, Last_Name__c,
-                   Employee_Code__c, Role__c, Department__c, Department_Ref__c, Department_Ref__r.Name, Employee_Status__c
+                   Employee_Code__c, Role__c, Department__c, Department_Ref__c, Department_Ref__r.Name,
+                   Employee_Status__c, Failed_Login_Attempts__c, Lockout_Until__c, Password_Changed_At__c
             FROM Employee__c
-            WHERE Official_Email__c = '${email.replace(/'/g, "\\'")}'
+            WHERE Official_Email__c = '${escapeSoqlString(email)}'
               AND Employee_Status__c = 'Active'
             LIMIT 1
           `);
 
           if (!emp || !emp.Password_Hash__c) return null;
+
+          // Account lockout. Login was previously unthrottled, so a password could
+          // be guessed at whatever rate the attacker could issue requests. The
+          // counter lives in Salesforce rather than in memory because serverless
+          // instances are short-lived and do not share state.
+          if (emp.Lockout_Until__c && new Date(emp.Lockout_Until__c) > new Date()) {
+            return null;
+          }
+
           const isValid = await compare(password, emp.Password_Hash__c);
-          if (!isValid) return null;
+
+          if (!isValid) {
+            const attempts = (emp.Failed_Login_Attempts__c ?? 0) + 1;
+            const update: Record<string, unknown> = { Failed_Login_Attempts__c: attempts };
+            if (attempts >= MAX_FAILED_ATTEMPTS) {
+              update.Lockout_Until__c = new Date(Date.now() + LOCKOUT_MINUTES * 60_000).toISOString();
+              update.Failed_Login_Attempts__c = 0;
+            }
+            try {
+              await updateRecord("Employee__c", emp.Id, update);
+            } catch (recordErr) {
+              console.error("[Auth] Could not record failed attempt:", recordErr);
+            }
+            return null;
+          }
+
+          if ((emp.Failed_Login_Attempts__c ?? 0) > 0 || emp.Lockout_Until__c) {
+            try {
+              await updateRecord("Employee__c", emp.Id, {
+                Failed_Login_Attempts__c: 0,
+                Lockout_Until__c: null,
+              });
+            } catch (recordErr) {
+              console.error("[Auth] Could not reset failed attempts:", recordErr);
+            }
+          }
 
           return {
             id: emp.Id,
@@ -95,6 +142,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             department: emp.Department_Ref__r?.Name || emp.Department__c || "",
             firstName: emp.First_Name__c,
             lastName: emp.Last_Name__c,
+            passwordChangedAt: emp.Password_Changed_At__c ?? undefined,
           };
         } catch (err) {
           console.error("[Auth] Salesforce login error:", err);

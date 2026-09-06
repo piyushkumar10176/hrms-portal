@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { 
-  getEmployeeByEmail, 
-  getPendingApprovals, 
-  getPendingRegularizationApprovals,
-  getPendingExpenseApprovals,
-  getPendingReimbursementApprovals,
-  createHistoryRecord 
-} from "@/lib/salesforce-queries";
+import { getPendingApprovals, getPendingRegularizationApprovals, getPendingExpenseApprovals, getPendingReimbursementApprovals, createHistoryRecord, type SFApprovalRequest } from "@/lib/salesforce-queries";
 import { updateRecord, createRecord, query } from "@/lib/salesforce";
 import { assertSalesforceId, InvalidSalesforceIdError } from "@/lib/soql";
+import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +12,7 @@ export async function GET() {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   
   try {
-    const sfEmp = await getEmployeeByEmail(session.user.email);
+    const sfEmp = await getSessionEmployee(session);
     
     // Fetch all pending approvals in parallel. A failure in one source must not
     // hide the others, but it must not be silent either: previously each source
@@ -43,7 +37,7 @@ export async function GET() {
     ]);
     
     // Map leaves
-    const leaves = leaveReqs.map((r: any) => ({
+    const leaves = leaveReqs.map((r: SFApprovalRequest) => ({
       id: r.Id,
       type: "Leave",
       employeeId: r.Employee__c,
@@ -54,7 +48,7 @@ export async function GET() {
     }));
 
     // Map regularizations
-    const regularizations = regReqs.map((r: any) => ({
+    const regularizations = regReqs.map((r: SFApprovalRequest) => ({
       id: r.Id,
       type: "Regularization",
       employeeId: r.Employee__c,
@@ -65,7 +59,7 @@ export async function GET() {
     }));
 
     // Map expenses
-    const expenses = expReqs.map((r: any) => ({
+    const expenses = expReqs.map((r: SFApprovalRequest) => ({
       id: r.Id,
       type: "Expense",
       employeeId: r.Employee__c,
@@ -76,7 +70,7 @@ export async function GET() {
     }));
 
     // Map reimbursements
-    const reimbursements = reimbReqs.map((r: any) => ({
+    const reimbursements = reimbReqs.map((r: SFApprovalRequest) => ({
       id: r.Id,
       type: "Reimbursement",
       employeeId: r.Employee__c,
@@ -96,6 +90,9 @@ export async function GET() {
       ...(degradedSources.length ? { degradedSources } : {})
     });
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     console.error("Salesforce getPendingApprovals error:", err);
     return NextResponse.json({ error: "Failed to fetch approvals" }, { status: 500 });
   }
@@ -124,7 +121,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const recordId = assertSalesforceId(requestId);
-    const manager = await getEmployeeByEmail(session.user.email);
+    const manager = await getSessionEmployee(session);
     const newStatus = action === "approve" ? "Approved" : "Rejected";
 
     // Authorization. The caller must be the approver recorded on the request
@@ -216,6 +213,9 @@ export async function POST(req: NextRequest) {
     });
 
   } catch (err) {
+    if (err instanceof StaleSessionError) {
+      return NextResponse.json({ error: err.message }, { status: 401 });
+    }
     if (err instanceof InvalidSalesforceIdError) {
       return NextResponse.json({ error: "Invalid request id" }, { status: 400 });
     }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Lockout_Until__c</fullName>
+    <label>Lockout Until</label>
+    <type>DateTime</type>
+    <description>While set and in the future, portal login is refused for this employee regardless of the password supplied.</description>
+</CustomField>

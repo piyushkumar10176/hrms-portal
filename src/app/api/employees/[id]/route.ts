@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEmployeeById, getHistoryRecords } from "@/lib/salesforce-queries";
-import { updateRecord } from "@/lib/salesforce";
+import { updateRecord, extractValidationMessage } from "@/lib/salesforce";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -75,7 +75,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const body = await req.json();
   
   // Whitelist allowed fields to Salesforce mapping
-  const allowedUpdates: Record<string, any> = {};
+  const allowedUpdates: Record<string, unknown> = {};
   if (body.firstName !== undefined) allowedUpdates.First_Name__c = body.firstName;
   if (body.lastName !== undefined) allowedUpdates.Last_Name__c = body.lastName;
   if (body.phone !== undefined) allowedUpdates.Mobile__c = body.phone;
@@ -137,11 +137,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     };
 
     return NextResponse.json({ employee: updated, source: "salesforce" });
-  } catch (err: any) {
+  } catch (err) {
     console.error("[Employee PUT] Salesforce updateRecord error:", err);
-    console.error("[Employee PUT] Error message:", err.message);
-    if (err.errorCode) console.error("[Employee PUT] Error code:", err.errorCode);
-    if (err.fields) console.error("[Employee PUT] Error fields:", err.fields);
-    return NextResponse.json({ error: err.message || "Failed to update employee" }, { status: 500 });
+    console.error("[Employee PUT] Error:", err);
+    
+    const validation = extractValidationMessage(err);
+    if (validation) {
+      return NextResponse.json({ error: validation }, { status: 400 });
+    }
+    return NextResponse.json({ error: "Failed to update employee" }, { status: 500 });
   }
 }

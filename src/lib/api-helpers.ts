@@ -62,7 +62,7 @@ export async function resolveEmployeeId(email: string): Promise<string> {
  * }
  * ```
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 type SessionData = { user: { name?: string | null; email?: string | null; image?: string | null; employeeId?: string; role?: string } } | null;
 
 export async function withAuth(

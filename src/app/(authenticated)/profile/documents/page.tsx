@@ -15,22 +15,27 @@ export default function ProfileDocuments() {
   const { data: session } = useSession();
   const [documents, setDocuments] = useState<EmpDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const employeeId = session?.user?.id;
 
   useEffect(() => {
-    if (session?.user?.id) fetchDocuments();
-  }, [session?.user?.id]);
-
-  const fetchDocuments = async () => {
-    try {
-      const res = await fetch(`/api/employees/${session!.user.id}/documents`);
-      const data = await res.json();
-      if (res.ok) setDocuments(data.documents || []);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+    if (!employeeId) return;
+    // `ignore` discards a response that arrives after the effect was cleaned
+    // up or superseded, which otherwise sets state on an unmounted component
+    // and can apply an older response over a newer one.
+    let ignore = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/employees/${employeeId}/documents`);
+        const data = await res.json();
+        if (!ignore && res.ok) setDocuments(data.documents || []);
+      } catch (err) {
+        if (!ignore) console.error(err);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    })();
+    return () => { ignore = true; };
+  }, [employeeId]);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">

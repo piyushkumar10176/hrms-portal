@@ -18,7 +18,7 @@ export async function GET() {
     `;
     const templates = await query(q);
     return NextResponse.json({ templates });
-  } catch (err: any) {
+  } catch (err) {
     console.error("Failed to fetch onboarding templates:", err);
     return NextResponse.json({ error: "Failed to fetch templates" }, { status: 500 });
   }

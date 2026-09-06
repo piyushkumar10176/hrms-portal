@@ -41,6 +41,9 @@ export async function POST(req: NextRequest) {
       Password_Hash__c: hash,
       Invite_Token__c: null,
       Invite_Token_Expires_At__c: null,
+      Password_Changed_At__c: new Date().toISOString(),
+      Failed_Login_Attempts__c: 0,
+      Lockout_Until__c: null,
     });
 
     return NextResponse.json({ message: "Password setup successfully. You can now log in." }, { status: 200 });
