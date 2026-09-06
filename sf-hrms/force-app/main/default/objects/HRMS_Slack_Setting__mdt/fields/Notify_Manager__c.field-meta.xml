@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Notify_Manager__c</fullName>
+    <label>Notify Manager</label>
+    <type>Checkbox</type>
+    <defaultValue>true</defaultValue>
+    <description>Send a direct message to the approver named on the request.</description>
+</CustomField>

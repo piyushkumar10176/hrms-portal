@@ -42,9 +42,41 @@ public with sharing class LeaveRequestTriggerHandler {
 
         if (isInsert) {
             createNotifications(buildInsertNotifications(newRequests));
+            LeaveSlackNotifier.enqueue(idsOf(newRequests), true);
         } else if (isUpdate) {
             createNotifications(buildStatusChangeNotifications(newRequests, oldMap));
+            LeaveSlackNotifier.enqueue(statusChangedIds(newRequests, oldMap), false);
         }
+    }
+
+    /** Ids of every request in the collection. */
+    private static Set<Id> idsOf(List<Leave_Request__c> requests) {
+        Set<Id> ids = new Set<Id>();
+        if (requests == null) {
+            return ids;
+        }
+        for (Leave_Request__c request : requests) {
+            ids.add(request.Id);
+        }
+        return ids;
+    }
+
+    /** Ids of requests whose status actually moved in this update. */
+    private static Set<Id> statusChangedIds(
+        List<Leave_Request__c> requests,
+        Map<Id, Leave_Request__c> oldMap
+    ) {
+        Set<Id> ids = new Set<Id>();
+        if (requests == null || oldMap == null) {
+            return ids;
+        }
+        for (Leave_Request__c request : requests) {
+            Leave_Request__c priorRequest = oldMap.get(request.Id);
+            if (priorRequest != null && request.Status__c != priorRequest.Status__c) {
+                ids.add(request.Id);
+            }
+        }
+        return ids;
     }
 
     /**

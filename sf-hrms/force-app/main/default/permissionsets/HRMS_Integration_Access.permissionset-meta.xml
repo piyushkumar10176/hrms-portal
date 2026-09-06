@@ -1020,6 +1020,19 @@
         <field>Employee__c.Password_Changed_At__c</field>
         <readable>true</readable>
     </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Employee__c.Slack_User_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <classAccesses>
+        <apexClass>SlackService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>LeaveSlackNotifier</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <userPermissions>
         <enabled>true</enabled>
         <name>ApiEnabled</name>

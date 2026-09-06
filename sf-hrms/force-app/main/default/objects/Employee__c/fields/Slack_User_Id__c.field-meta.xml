@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Slack_User_Id__c</fullName>
+    <label>Slack User Id</label>
+    <type>Text</type>
+    <length>20</length>
+    <description>Slack member id (for example U0123456789), resolved once and stored. Storing it avoids calling users.lookupByEmail on every send, which is rate limited, needs the users:read.email scope, and fails for employees whose HR email does not match their Slack account.</description>
+</CustomField>
