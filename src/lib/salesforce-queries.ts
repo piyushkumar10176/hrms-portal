@@ -236,7 +236,7 @@ export async function createPunch(data: {
   punchType: "Check-In" | "Check-Out";
   latitude?: number;
   longitude?: number;
-  source?: "Web" | "Mobile" | "Biometric";
+  source?: "Web" | "Mobile" | "Biometric" | "Slack";
   externalPunchId?: string;
   deviceId?: string;
 }): Promise<string> {

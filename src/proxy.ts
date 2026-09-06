@@ -10,8 +10,10 @@ const { auth: withAuth } = NextAuth(authConfig);
 export const proxy = withAuth((req) => {
   const { pathname } = req.nextUrl;
 
-  // Public routes — accessible without authentication
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/setup-password") || pathname.startsWith("/api/setup-password") || pathname.startsWith("/api/webhook") || pathname.startsWith("/_next") || pathname === "/favicon.ico" || pathname === "/manifest.json" || pathname.startsWith("/icons") || pathname === "/sw.js") {
+  // Public routes: accessible without a session. /api/slack is public because
+  // Slack authenticates itself by signing each request, which the routes verify
+  // before reading the payload.
+  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/setup-password") || pathname.startsWith("/api/setup-password") || pathname.startsWith("/api/webhook") || pathname.startsWith("/api/slack") || pathname.startsWith("/_next") || pathname === "/favicon.ico" || pathname === "/manifest.json" || pathname.startsWith("/icons") || pathname === "/sw.js") {
     return NextResponse.next();
   }
 
