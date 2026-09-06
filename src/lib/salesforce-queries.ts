@@ -828,8 +828,10 @@ export async function countRegularizationsInMonth(
 
 /** Leave summary for a dashboard: counts by status for the current year. */
 export async function getLeaveSummary() {
-  return query<{ Status__c: string; expr0: number }>(`
-    SELECT Status__c, COUNT(Id) expr0
+  // "expr0" is reserved by Salesforce for auto-generated aggregate aliases and
+  // is rejected if supplied explicitly, so the alias is named.
+  return query<{ Status__c: string; total: number }>(`
+    SELECT Status__c, COUNT(Id) total
     FROM Leave_Request__c
     WHERE CALENDAR_YEAR(From_Date__c) = ${new Date().getFullYear()}
     GROUP BY Status__c

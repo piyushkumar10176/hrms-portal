@@ -378,7 +378,7 @@ async function handleDashboard(responseUrl: string): Promise<void> {
     getPenaltySummary(today),
   ]);
 
-  const byStatus = new Map(summary.map((r) => [r.Status__c, r.expr0]));
+  const byStatus = new Map(summary.map((r) => [r.Status__c, r.total]));
   const statusLine = ["Submitted", "Approved", "Rejected", "Cancelled"]
     .map((s) => `${s}: *${byStatus.get(s) ?? 0}*`)
     .join("   ");
