@@ -2,9 +2,12 @@ import NextAuth from "next-auth";
 import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
 
-export const { auth: middleware } = NextAuth(authConfig);
+// Next.js 16 renamed the middleware file convention to `proxy`. While running as
+// `src/middleware.ts` this file was compiled but never executed, so every page and
+// API route was served without the authentication and admin checks below.
+const { auth: withAuth } = NextAuth(authConfig);
 
-export default middleware((req) => {
+export const proxy = withAuth((req) => {
   const { pathname } = req.nextUrl;
 
   // Public routes — accessible without authentication
@@ -12,8 +15,14 @@ export default middleware((req) => {
     return NextResponse.next();
   }
 
-  // Redirect unauthenticated users to login
+  const isApiRoute = pathname.startsWith("/api/");
+
+  // Unauthenticated: API callers get JSON, browsers get the login page.
+  // Redirecting an API route would hand the caller an HTML document.
   if (!req.auth) {
+    if (isApiRoute) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
     const loginUrl = new URL("/login", req.url);
     loginUrl.searchParams.set("callbackUrl", pathname);
     return NextResponse.redirect(loginUrl);
@@ -43,6 +52,8 @@ export default middleware((req) => {
 
   return NextResponse.next();
 });
+
+export default proxy;
 
 export const config = {
   matcher: ["/((?!_next/static|_next/image|favicon.ico|icons|manifest.json|sw.js).*)"],

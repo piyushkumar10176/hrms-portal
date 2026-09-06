@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
+import { auth } from "@/lib/auth";
 import { query } from "@/lib/salesforce";
 
 export async function GET() {
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
     const q = `
       SELECT Id, Name, Active__c, 
