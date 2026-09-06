@@ -4,6 +4,7 @@ Four documents. Start with the one that matches the question you have.
 
 | Document | Answers |
 |---|---|
+| [CloudSheer_HRMS_Handover.docx](CloudSheer_HRMS_Handover.docx) | **The one to hand over or present.** Everything below in plain language with diagrams: what is built, how HR, employees and admins each use it, who can do what, what is missing, the plan, three user stories, and a testing checklist |
 | [BUILD_STATUS.md](BUILD_STATUS.md) | What is finished, what is half-finished, what has not been started, and what is blocking each one |
 | [KEKA_PARITY.md](KEKA_PARITY.md) | How this compares against Keka module by module, and what the decision to leave Keka actually involves |
 | [HRMS_BUILD_REFERENCE.md](HRMS_BUILD_REFERENCE.md) | How the system works: architecture, permissions, punching in, applying for leave, Slack design, configuration |
