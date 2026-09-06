@@ -782,3 +782,72 @@ export async function getAbsencesOn(isoDate: string) {
     ORDER BY Employee__r.Name
   `);
 }
+
+/** Penalised attendance days in the month containing isoDate. */
+export async function getPenalisedDays(employeeId: string, isoDate: string) {
+  const start = isoDate.slice(0, 7) + "-01";
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 0));
+  const end = endDate.toISOString().slice(0, 10);
+  return query<{
+    Id: string;
+    Date__c: string;
+    Check_In__c: string | null;
+    Check_Out__c: string | null;
+    Total_Hours__c: number | null;
+    Status__c: string | null;
+    Penalty_Reason__c: string | null;
+  }>(`
+    SELECT Id, Date__c, Check_In__c, Check_Out__c, Total_Hours__c, Status__c, Penalty_Reason__c
+    FROM Attendance__c
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
+      AND Date__c >= ${start} AND Date__c <= ${end}
+      AND Penalty__c = true
+    ORDER BY Date__c DESC
+    LIMIT 31
+  `);
+}
+
+/** Regularizations already raised in the month containing isoDate. */
+export async function countRegularizationsInMonth(
+  employeeId: string,
+  isoDate: string
+): Promise<number> {
+  const start = isoDate.slice(0, 7) + "-01";
+  const startDate = new Date(`${start}T00:00:00Z`);
+  const endDate = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth() + 1, 0));
+  const end = endDate.toISOString().slice(0, 10);
+  const rows = await query<{ Id: string }>(`
+    SELECT Id FROM Regularization_Request__c
+    WHERE Employee__c = '${assertSalesforceId(employeeId)}'
+      AND Date__c >= ${start} AND Date__c <= ${end}
+      AND Status__c IN ('Submitted','Approved','Rejected')
+  `);
+  return rows.length;
+}
+
+/** Leave summary for a dashboard: counts by status for the current year. */
+export async function getLeaveSummary() {
+  return query<{ Status__c: string; expr0: number }>(`
+    SELECT Status__c, COUNT(Id) expr0
+    FROM Leave_Request__c
+    WHERE CALENDAR_YEAR(From_Date__c) = ${new Date().getFullYear()}
+    GROUP BY Status__c
+  `);
+}
+
+/** Attendance penalties in the current month, by employee. */
+export async function getPenaltySummary(isoDate: string) {
+  const start = isoDate.slice(0, 7) + "-01";
+  return query<{
+    Employee__r?: { Name?: string } | null;
+    Date__c: string;
+    Penalty_Reason__c: string | null;
+  }>(`
+    SELECT Employee__r.Name, Date__c, Penalty_Reason__c
+    FROM Attendance__c
+    WHERE Penalty__c = true AND Date__c >= ${start}
+    ORDER BY Employee__r.Name, Date__c DESC
+    LIMIT 100
+  `);
+}

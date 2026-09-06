@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Penalty_Reason__c</fullName>
+    <label>Penalty Reason</label>
+    <type>Text</type>
+    <length>255</length>
+    <description>Why the day was penalised, for example a late arrival or a short shift. Derived, not entered by hand.</description>
+</CustomField>

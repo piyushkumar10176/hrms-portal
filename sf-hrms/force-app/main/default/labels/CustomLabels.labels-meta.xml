@@ -14,7 +14,7 @@
         <language>en_US</language>
         <protected>false</protected>
         <shortDescription>Hours worked that count as a full day when no shift is assigned</shortDescription>
-        <value>8</value>
+        <value>9</value>
     </labels>
     <labels>
         <fullName>HRMS_Default_Half_Day_Hours</fullName>
@@ -39,5 +39,29 @@
         <protected>false</protected>
         <shortDescription>Grace minutes after shift start before an arrival counts as late</shortDescription>
         <value>15</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Penalty_Arrival_Time</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Arrival at or after this time counts as a penalty</shortDescription>
+        <value>11:00</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Penalty_Minimum_Hours</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Hours that must be worked to avoid a short-shift penalty</shortDescription>
+        <value>9</value>
+    </labels>
+    <labels>
+        <fullName>HRMS_Regularizations_Per_Month</fullName>
+        <categories>HRMS</categories>
+        <language>en_US</language>
+        <protected>false</protected>
+        <shortDescription>Regularization requests each employee may raise per calendar month</shortDescription>
+        <value>3</value>
     </labels>
 </CustomLabels>

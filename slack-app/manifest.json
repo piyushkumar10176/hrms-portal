@@ -35,6 +35,18 @@
         "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
         "description": "Who is on leave today",
         "should_escape": false
+      },
+      {
+        "command": "/regularize",
+        "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
+        "description": "Regularize a penalised attendance day",
+        "should_escape": false
+      },
+      {
+        "command": "/hrdash",
+        "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
+        "description": "HR dashboard: who is out, leave counts, penalties",
+        "should_escape": false
       }
     ]
   },

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Penalty__c</fullName>
+    <label>Penalty</label>
+    <type>Checkbox</type>
+    <defaultValue>false</defaultValue>
+    <description>Set by AttendanceRollupService when the day breaches attendance policy: arriving after the penalty cutoff, or working less than a full shift. Cleared automatically when punches change and the day no longer breaches.</description>
+</CustomField>

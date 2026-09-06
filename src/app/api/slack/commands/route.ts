@@ -24,6 +24,11 @@ import {
   getTodayPunches,
   createPunch,
   getAbsencesOn,
+  getPenalisedDays,
+  countRegularizationsInMonth,
+  getLeaveSummary,
+  getPenaltySummary,
+  getPendingRegularizationApprovals,
 } from "@/lib/salesforce-queries";
 import { toLeaveBalanceView } from "@/lib/leave-balance";
 import { businessTimeNow, businessToday } from "@/lib/business-time";
@@ -89,6 +94,12 @@ async function handleCommand(
         return;
       case "/whosout":
         await handleWhosOut(responseUrl);
+        return;
+      case "/regularize":
+        await handleRegularize(employee.Id, responseUrl);
+        return;
+      case "/hrdash":
+        await handleDashboard(responseUrl);
         return;
       default:
         await postToResponseUrl(responseUrl, ephemeral(`Unknown command ${command}`));
@@ -290,62 +301,209 @@ async function handleWhosOut(responseUrl: string): Promise<void> {
   });
 }
 
-async function handleApprovals(employeeId: string, responseUrl: string): Promise<void> {
-  const pending = await getPendingApprovals(employeeId);
-  if (pending.length === 0) {
-    await postToResponseUrl(responseUrl, ephemeral("Nothing is waiting on you."));
-    return;
-  }
+/** Monthly allowance, mirrored from the Salesforce label. */
+const REGULARIZATIONS_PER_MONTH = Number(process.env.HRMS_REGULARIZATIONS_PER_MONTH ?? "3");
 
-  // Slack truncates silently past 50 blocks, so cap the list and say so.
-  const shown = pending.slice(0, 10);
+/**
+ * Shows the month's penalised days and how much of the regularization
+ * allowance is left, with a button to raise one.
+ */
+async function handleRegularize(employeeId: string, responseUrl: string): Promise<void> {
+  const today = businessToday();
+  const [penalised, used] = await Promise.all([
+    getPenalisedDays(employeeId, today),
+    countRegularizationsInMonth(employeeId, today),
+  ]);
+
+  const remaining = Math.max(REGULARIZATIONS_PER_MONTH - used, 0);
   const blocks: unknown[] = [
-    { type: "header", text: { type: "plain_text", text: "Waiting for your decision" } },
-  ];
-
-  for (const request of shown) {
-    blocks.push({
+    { type: "header", text: { type: "plain_text", text: "Attendance regularization" } },
+    {
       type: "section",
       text: {
         type: "mrkdwn",
         text:
-          `*${request.Employee__r?.Name ?? "Employee"}* — ${request.Leave_Type__r?.Name ?? "Leave"}\n` +
-          `${request.From_Date__c} to ${request.To_Date__c} (${request.Days__c} day(s))` +
-          (request.Reason__c ? `\n_${request.Reason__c}_` : ""),
+          `You have used *${used}* of *${REGULARIZATIONS_PER_MONTH}* regularizations this month` +
+          `, *${remaining}* remaining.`,
       },
+    },
+  ];
+
+  if (penalised.length === 0) {
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: "No penalised days this month. Nothing to regularize." },
     });
+  } else {
+    const lines = penalised
+      .slice(0, 10)
+      .map((d) => `• *${d.Date__c}* — ${d.Penalty_Reason__c ?? "policy breach"}`)
+      .join("\n");
+    blocks.push({
+      type: "section",
+      text: { type: "mrkdwn", text: `*Penalised days this month*\n${lines}` },
+    });
+  }
+
+  if (remaining > 0 && penalised.length > 0) {
     blocks.push({
       type: "actions",
       elements: [
         {
           type: "button",
-          action_id: "approve_leave",
+          action_id: "open_regularize_modal",
           style: "primary",
-          value: request.Id,
-          text: { type: "plain_text", text: "Approve" },
+          text: { type: "plain_text", text: "Raise a regularization" },
         },
-        {
-          type: "button",
-          action_id: "reject_leave",
-          style: "danger",
-          value: request.Id,
-          text: { type: "plain_text", text: "Reject" },
-        },
+      ],
+    });
+  } else if (remaining === 0) {
+    blocks.push({
+      type: "context",
+      elements: [
+        { type: "mrkdwn", text: "Your allowance resets at the start of next month." },
       ],
     });
   }
 
-  if (pending.length > shown.length) {
+  await postToResponseUrl(responseUrl, { response_type: "ephemeral", blocks });
+}
+
+/** A small dashboard: who is out, leave by status, and this month's penalties. */
+async function handleDashboard(responseUrl: string): Promise<void> {
+  const today = businessToday();
+  const [absences, summary, penalties] = await Promise.all([
+    getAbsencesOn(today),
+    getLeaveSummary(),
+    getPenaltySummary(today),
+  ]);
+
+  const byStatus = new Map(summary.map((r) => [r.Status__c, r.expr0]));
+  const statusLine = ["Submitted", "Approved", "Rejected", "Cancelled"]
+    .map((s) => `${s}: *${byStatus.get(s) ?? 0}*`)
+    .join("   ");
+
+  const outLines = absences.length
+    ? absences
+        .slice(0, 15)
+        .map((a) => `• ${a.Employee__r?.Name ?? "Unknown"} — ${a.Leave_Type__r?.Name ?? "Leave"}`)
+        .join("\n")
+    : "_Nobody is out today._";
+
+  const penaltyByPerson = new Map<string, number>();
+  for (const p of penalties) {
+    const name = p.Employee__r?.Name ?? "Unknown";
+    penaltyByPerson.set(name, (penaltyByPerson.get(name) ?? 0) + 1);
+  }
+  const penaltyLines = penaltyByPerson.size
+    ? [...penaltyByPerson.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 10)
+        .map(([name, count]) => `• ${name} — ${count} day(s)`)
+        .join("\n")
+    : "_No attendance penalties this month._";
+
+  await postToResponseUrl(responseUrl, {
+    response_type: "ephemeral",
+    blocks: [
+      { type: "header", text: { type: "plain_text", text: `HR dashboard, ${today}` } },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `*On leave today: ${absences.length}*\n${outLines}` },
+      },
+      { type: "divider" },
+      { type: "section", text: { type: "mrkdwn", text: `*Leave requests this year*\n${statusLine}` } },
+      { type: "divider" },
+      {
+        type: "section",
+        text: { type: "mrkdwn", text: `*Attendance penalties this month*\n${penaltyLines}` },
+      },
+    ],
+  });
+}
+
+async function handleApprovals(employeeId: string, responseUrl: string): Promise<void> {
+  const [leave, regularizations] = await Promise.all([
+    getPendingApprovals(employeeId),
+    getPendingRegularizationApprovals(employeeId).catch(() => []),
+  ]);
+
+  if (leave.length === 0 && regularizations.length === 0) {
+    await postToResponseUrl(responseUrl, ephemeral("Nothing is waiting on you."));
+    return;
+  }
+
+  // Slack truncates past 50 blocks with no error, so cap each list and say so.
+  const blocks: unknown[] = [
+    { type: "header", text: { type: "plain_text", text: "Waiting for your decision" } },
+  ];
+
+  const shownLeave = leave.slice(0, 8);
+  for (const request of shownLeave) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `:palm_tree: *${request.Employee__r?.Name ?? "Employee"}* — ${request.Leave_Type__r?.Name ?? "Leave"}\n` +
+          `${request.From_Date__c} to ${request.To_Date__c} (${request.Days__c} day(s))` +
+          (request.Reason__c ? `\n_${request.Reason__c}_` : ""),
+      },
+    });
+    blocks.push(decisionButtons("approve_leave", "reject_leave", request.Id));
+  }
+
+  const shownReg = regularizations.slice(0, 8);
+  for (const request of shownReg) {
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `:clock9: *${request.Employee__r?.Name ?? "Employee"}* — regularization for ${request.Date__c}\n` +
+          `In ${request.Requested_Clock_In__c ?? "-"}, out ${request.Requested_Clock_Out__c ?? "-"}` +
+          (request.Reason__c ? `\n_${request.Reason__c}_` : ""),
+      },
+    });
+    blocks.push(decisionButtons("approve_regularization", "reject_regularization", request.Id));
+  }
+
+  const hiddenLeave = leave.length - shownLeave.length;
+  const hiddenReg = regularizations.length - shownReg.length;
+  if (hiddenLeave > 0 || hiddenReg > 0) {
     blocks.push({
       type: "context",
       elements: [
         {
           type: "mrkdwn",
-          text: `Showing ${shown.length} of ${pending.length}. Run the command again after actioning these.`,
+          text: `Not shown: ${hiddenLeave} leave, ${hiddenReg} regularization. Run the command again after actioning these.`,
         },
       ],
     });
   }
 
   await postToResponseUrl(responseUrl, { response_type: "ephemeral", blocks });
+}
+
+/** Approve and Reject buttons carrying the record id. */
+function decisionButtons(approveAction: string, rejectAction: string, recordId: string) {
+  return {
+    type: "actions",
+    elements: [
+      {
+        type: "button",
+        action_id: approveAction,
+        style: "primary",
+        value: recordId,
+        text: { type: "plain_text", text: "Approve" },
+      },
+      {
+        type: "button",
+        action_id: rejectAction,
+        style: "danger",
+        value: recordId,
+        text: { type: "plain_text", text: "Reject" },
+      },
+    ],
+  };
 }

@@ -166,6 +166,12 @@ public with sharing class AttendanceRollupService {
             row.Late_By_Minutes__c = totals.lateMinutes(shift, businessTimeZone());
             row.Status__c = deriveStatus(totals, shift, holidayDates);
 
+            // Penalties are derived, never sticky: if the punches change so the
+            // day no longer breaches, the flag clears itself.
+            String penaltyReason = derivePenaltyReason(totals, row.Status__c);
+            row.Penalty__c = penaltyReason != null;
+            row.Penalty_Reason__c = penaltyReason;
+
             if (existing == null || isChanged(existing, row)) {
                 toUpsert.add(row);
             }
@@ -184,7 +190,49 @@ public with sharing class AttendanceRollupService {
             || existing.Check_Out__c != candidate.Check_Out__c
             || existing.Total_Hours__c != candidate.Total_Hours__c
             || existing.Late_By_Minutes__c != candidate.Late_By_Minutes__c
-            || existing.Status__c != candidate.Status__c;
+            || existing.Status__c != candidate.Status__c
+            || existing.Penalty__c != candidate.Penalty__c
+            || existing.Penalty_Reason__c != candidate.Penalty_Reason__c;
+    }
+
+    /**
+     * Attendance policy. Returns the reason the day is penalised, or null.
+     *
+     * Two breaches, both configurable by Custom Label:
+     *   arriving at or after HRMS_Penalty_Arrival_Time, and
+     *   working less than HRMS_Penalty_Minimum_Hours.
+     *
+     * Days that are not working days are never penalised, and a day still open
+     * because there is no check-out is left alone rather than judged early.
+     */
+    @TestVisible
+    private static String derivePenaltyReason(DayTotals totals, String status) {
+        if (status == STATUS_WEEK_OFF || status == STATUS_HOLIDAY) {
+            return null;
+        }
+        if (totals.firstCheckIn == null) {
+            return null;
+        }
+
+        List<String> reasons = new List<String>();
+
+        Integer cutoff = parseHoursMinutes(Label.HRMS_Penalty_Arrival_Time);
+        if (cutoff != null) {
+            Integer arrival = parseHoursMinutes(totals.firstCheckIn.format('HH:mm', businessTimeZone()));
+            if (arrival != null && arrival >= cutoff) {
+                reasons.add('arrived at ' + totals.firstCheckIn.format('HH:mm', businessTimeZone()) +
+                            ', at or after ' + Label.HRMS_Penalty_Arrival_Time);
+            }
+        }
+
+        Decimal hours = totals.hoursWorked();
+        Decimal minimumHours = labelAsDecimal(Label.HRMS_Penalty_Minimum_Hours, 9);
+        if (hours != null && hours < minimumHours) {
+            reasons.add('worked ' + String.valueOf(hours) + ' of ' +
+                        String.valueOf(minimumHours) + ' hours');
+        }
+
+        return reasons.isEmpty() ? null : String.join(reasons, '; ');
     }
 
     private static String deriveStatus(DayTotals totals, Shift__c shift, Set<Date> holidayDates) {

@@ -12,11 +12,18 @@
 import { NextRequest, NextResponse, after } from "next/server";
 import { verifySlackRequest } from "@/lib/slack-verify";
 import { employeeForSlackUser, ephemeral, postToResponseUrl, canOverrideApproval, type SlackEmployee } from "@/lib/slack";
-import { getLeaveTypes, getLeaveBalances, getHolidays } from "@/lib/salesforce-queries";
+import {
+  getLeaveTypes,
+  getLeaveBalances,
+  getHolidays,
+  getPenalisedDays,
+  countRegularizationsInMonth,
+} from "@/lib/salesforce-queries";
 import { query, updateRecord, createRecord } from "@/lib/salesforce";
 import { assertSalesforceId } from "@/lib/soql";
 import { countWorkingDays } from "@/lib/leave-days";
 import { availableDays } from "@/lib/leave-balance";
+import { businessToday } from "@/lib/business-time";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +74,20 @@ interface SlackInteraction {
   actions?: { action_id: string; value?: string }[];
   view?: {
     callback_id?: string;
-    state?: { values: Record<string, Record<string, { value?: string; selected_option?: { value: string }; selected_date?: string }>> };
+    state?: {
+      values: Record<
+        string,
+        Record<
+          string,
+          {
+            value?: string;
+            selected_option?: { value: string };
+            selected_date?: string;
+            selected_time?: string;
+          }
+        >
+      >;
+    };
   };
 }
 
@@ -89,9 +109,23 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
       return;
     }
 
-    if (action.action_id === "approve_leave" || action.action_id === "reject_leave") {
-      const decision = action.action_id === "approve_leave" ? "Approved" : "Rejected";
-      const result = await decideLeave(action.value ?? "", actor, decision);
+    if (action.action_id === "open_regularize_modal") {
+      await openRegularizeModal(payload.trigger_id ?? "", actor.Id, responseUrl);
+      return;
+    }
+
+    const decisionActions: Record<string, { object: string; label: string; decision: "Approved" | "Rejected" }> = {
+      approve_leave: { object: "Leave_Request__c", label: "Leave request", decision: "Approved" },
+      reject_leave: { object: "Leave_Request__c", label: "Leave request", decision: "Rejected" },
+      approve_regularization: { object: "Regularization_Request__c", label: "Regularization", decision: "Approved" },
+      reject_regularization: { object: "Regularization_Request__c", label: "Regularization", decision: "Rejected" },
+    };
+
+    const decisionAction = decisionActions[action.action_id];
+    if (decisionAction) {
+      const result = await decideRequest(
+        decisionAction.object, decisionAction.label, action.value ?? "", actor, decisionAction.decision
+      );
       await postToResponseUrl(responseUrl, {
         response_type: "ephemeral",
         replace_original: false,
@@ -107,7 +141,9 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
 /**
  * Applies a decision to a leave request, enforcing the same rules as the portal.
  */
-async function decideLeave(
+async function decideRequest(
+  objectName: string,
+  label: string,
   requestId: string,
   actor: SlackEmployee,
   decision: "Approved" | "Rejected"
@@ -126,7 +162,7 @@ async function decideLeave(
     Status__c: string | null;
   }>(`
     SELECT Id, Approver__c, Employee__c, Status__c
-    FROM Leave_Request__c WHERE Id = '${id}' LIMIT 1
+    FROM ${objectName} WHERE Id = '${id}' LIMIT 1
   `);
 
   if (!record) return "That request no longer exists.";
@@ -140,10 +176,10 @@ async function decideLeave(
   if (record.Employee__c === actor.Id) return "You cannot decide your own request.";
   if (record.Status__c !== "Submitted") return `That request is already ${record.Status__c}.`;
 
-  await updateRecord("Leave_Request__c", id, { Status__c: decision });
+  await updateRecord(objectName, id, { Status__c: decision });
   return isApprover
-    ? `Leave request ${decision.toLowerCase()}.`
-    : `Leave request ${decision.toLowerCase()} as an HR override.`;
+    ? `${label} ${decision.toLowerCase()}.`
+    : `${label} ${decision.toLowerCase()} as an HR override.`;
 }
 
 /** Opens the apply-for-leave modal. */
@@ -213,11 +249,109 @@ async function openLeaveModal(triggerId: string, employeeId: string): Promise<vo
   });
 }
 
+/** Monthly regularization allowance, mirroring the Salesforce label. */
+const REGULARIZATIONS_PER_MONTH = Number(process.env.HRMS_REGULARIZATIONS_PER_MONTH ?? "3");
+
+/**
+ * Opens the regularization modal, pre-filled with the month's penalised days.
+ *
+ * The allowance is re-checked here as well as on submission, because the button
+ * that opened this modal may have been rendered before the last one was used.
+ */
+async function openRegularizeModal(
+  triggerId: string,
+  employeeId: string,
+  responseUrl: string
+): Promise<void> {
+  if (!triggerId) return;
+  const today = businessToday();
+  const [penalised, used] = await Promise.all([
+    getPenalisedDays(employeeId, today),
+    countRegularizationsInMonth(employeeId, today),
+  ]);
+
+  if (used >= REGULARIZATIONS_PER_MONTH) {
+    await postToResponseUrl(
+      responseUrl,
+      ephemeral(`You have used all ${REGULARIZATIONS_PER_MONTH} regularizations this month.`)
+    );
+    return;
+  }
+  if (penalised.length === 0) {
+    await postToResponseUrl(responseUrl, ephemeral("No penalised days to regularize this month."));
+    return;
+  }
+
+  const options = penalised.slice(0, 100).map((d) => ({
+    text: {
+      type: "plain_text",
+      text: `${d.Date__c} — ${(d.Penalty_Reason__c ?? "policy breach").slice(0, 50)}`.slice(0, 75),
+    },
+    value: d.Date__c,
+  }));
+
+  await fetch(`${SLACK_API}/views.open`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN ?? ""}`,
+    },
+    body: JSON.stringify({
+      trigger_id: triggerId,
+      view: {
+        type: "modal",
+        callback_id: "regularize_apply",
+        title: { type: "plain_text", text: "Regularize" },
+        submit: { type: "plain_text", text: "Submit" },
+        close: { type: "plain_text", text: "Cancel" },
+        blocks: [
+          {
+            type: "context",
+            elements: [
+              {
+                type: "mrkdwn",
+                text: `${REGULARIZATIONS_PER_MONTH - used} of ${REGULARIZATIONS_PER_MONTH} remaining this month.`,
+              },
+            ],
+          },
+          {
+            type: "input",
+            block_id: "on_date",
+            label: { type: "plain_text", text: "Day to regularize" },
+            element: { type: "static_select", action_id: "value", options },
+          },
+          {
+            type: "input",
+            block_id: "clock_in",
+            label: { type: "plain_text", text: "Actual clock in" },
+            element: { type: "timepicker", action_id: "value" },
+          },
+          {
+            type: "input",
+            block_id: "clock_out",
+            label: { type: "plain_text", text: "Actual clock out" },
+            element: { type: "timepicker", action_id: "value" },
+          },
+          {
+            type: "input",
+            block_id: "reason",
+            label: { type: "plain_text", text: "Reason" },
+            element: { type: "plain_text_input", action_id: "value", multiline: true },
+          },
+        ],
+      },
+    }),
+  });
+}
+
 /**
  * Validates and creates the leave request. Errors are returned as Slack
  * response_action errors so they appear against the offending field.
  */
 async function handleViewSubmission(payload: SlackInteraction): Promise<NextResponse> {
+  if (payload.view?.callback_id === "regularize_apply") {
+    return handleRegularizeSubmission(payload);
+  }
   if (payload.view?.callback_id !== "leave_apply") {
     return new NextResponse(null, { status: 200 });
   }
@@ -284,6 +418,65 @@ async function handleViewSubmission(payload: SlackInteraction): Promise<NextResp
     return NextResponse.json({
       response_action: "errors",
       errors: { leave_type: "Could not save that in Salesforce. Please try again." },
+    });
+  }
+}
+
+/**
+ * Creates the regularization request after re-checking the monthly allowance.
+ *
+ * The allowance is enforced here, not only in the UI, because the modal could
+ * have been open while another request was submitted elsewhere.
+ */
+async function handleRegularizeSubmission(payload: SlackInteraction): Promise<NextResponse> {
+  const values = payload.view?.state?.values ?? {};
+  const onDate = values.on_date?.value?.selected_option?.value ?? "";
+  const clockIn = values.clock_in?.value?.selected_time ?? "";
+  const clockOut = values.clock_out?.value?.selected_time ?? "";
+  const reason = values.reason?.value?.value ?? "";
+
+  if (clockIn && clockOut && clockOut <= clockIn) {
+    return NextResponse.json({
+      response_action: "errors",
+      errors: { clock_out: "Clock out must be after clock in." },
+    });
+  }
+
+  try {
+    const actor = await employeeForSlackUser(payload.user?.id ?? "");
+    if (!actor) {
+      return NextResponse.json({
+        response_action: "errors",
+        errors: { on_date: "Your Slack account is not linked to an employee." },
+      });
+    }
+
+    const used = await countRegularizationsInMonth(actor.Id, onDate || businessToday());
+    if (used >= REGULARIZATIONS_PER_MONTH) {
+      return NextResponse.json({
+        response_action: "errors",
+        errors: {
+          on_date: `You have used all ${REGULARIZATIONS_PER_MONTH} regularizations for that month.`,
+        },
+      });
+    }
+
+    await createRecord("Regularization_Request__c", {
+      Employee__c: actor.Id,
+      Date__c: onDate,
+      Requested_Clock_In__c: clockIn ? `${clockIn}:00.000Z` : null,
+      Requested_Clock_Out__c: clockOut ? `${clockOut}:00.000Z` : null,
+      Reason__c: reason,
+      Status__c: "Submitted",
+      Approver__c: actor.Reporting_Manager__c,
+    });
+
+    return NextResponse.json({ response_action: "clear" });
+  } catch (err) {
+    console.error("[slack/interactivity] regularization failed:", err);
+    return NextResponse.json({
+      response_action: "errors",
+      errors: { on_date: "Could not save that in Salesforce. Please try again." },
     });
   }
 }
