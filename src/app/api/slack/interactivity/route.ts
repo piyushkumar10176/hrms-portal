@@ -11,7 +11,7 @@
 
 import { NextRequest, NextResponse, after } from "next/server";
 import { verifySlackRequest } from "@/lib/slack-verify";
-import { employeeForSlackUser, ephemeral, postToResponseUrl } from "@/lib/slack";
+import { employeeForSlackUser, ephemeral, postToResponseUrl, canOverrideApproval, type SlackEmployee } from "@/lib/slack";
 import { getLeaveTypes, getLeaveBalances, getHolidays } from "@/lib/salesforce-queries";
 import { query, updateRecord, createRecord } from "@/lib/salesforce";
 import { assertSalesforceId } from "@/lib/soql";
@@ -91,7 +91,7 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
 
     if (action.action_id === "approve_leave" || action.action_id === "reject_leave") {
       const decision = action.action_id === "approve_leave" ? "Approved" : "Rejected";
-      const result = await decideLeave(action.value ?? "", actor.Id, decision);
+      const result = await decideLeave(action.value ?? "", actor, decision);
       await postToResponseUrl(responseUrl, {
         response_type: "ephemeral",
         replace_original: false,
@@ -109,7 +109,7 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
  */
 async function decideLeave(
   requestId: string,
-  actorEmployeeId: string,
+  actor: SlackEmployee,
   decision: "Approved" | "Rejected"
 ): Promise<string> {
   let id: string;
@@ -130,12 +130,20 @@ async function decideLeave(
   `);
 
   if (!record) return "That request no longer exists.";
-  if (record.Approver__c !== actorEmployeeId) return "You are not the approver for that request.";
-  if (record.Employee__c === actorEmployeeId) return "You cannot decide your own request.";
+
+  const isApprover = record.Approver__c === actor.Id;
+  const isHrOverride = canOverrideApproval(actor);
+  if (!isApprover && !isHrOverride) {
+    return "You are not the approver for that request.";
+  }
+  // Approving your own leave is refused even for HR.
+  if (record.Employee__c === actor.Id) return "You cannot decide your own request.";
   if (record.Status__c !== "Submitted") return `That request is already ${record.Status__c}.`;
 
   await updateRecord("Leave_Request__c", id, { Status__c: decision });
-  return `Leave request ${decision.toLowerCase()}.`;
+  return isApprover
+    ? `Leave request ${decision.toLowerCase()}.`
+    : `Leave request ${decision.toLowerCase()} as an HR override.`;
 }
 
 /** Opens the apply-for-leave modal. */

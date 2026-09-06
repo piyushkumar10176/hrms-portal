@@ -191,6 +191,31 @@ public with sharing class LeaveSlackNotifier implements Queueable, Database.Allo
             });
         }
 
+        // Action buttons only on a new request. The interactivity route re-checks
+        // who clicked, so a button reaching the wrong person is refused rather
+        // than trusted; these are a convenience, not the authorisation boundary.
+        if (isNew) {
+            blocks.add(new Map<String, Object>{
+                'type' => 'actions',
+                'elements' => new List<Object>{
+                    new Map<String, Object>{
+                        'type' => 'button',
+                        'action_id' => 'approve_leave',
+                        'style' => 'primary',
+                        'value' => request.Id,
+                        'text' => new Map<String, Object>{ 'type' => 'plain_text', 'text' => 'Approve' }
+                    },
+                    new Map<String, Object>{
+                        'type' => 'button',
+                        'action_id' => 'reject_leave',
+                        'style' => 'danger',
+                        'value' => request.Id,
+                        'text' => new Map<String, Object>{ 'type' => 'plain_text', 'text' => 'Reject' }
+                    }
+                }
+            });
+        }
+
         blocks.add(new Map<String, Object>{
             'type' => 'context',
             'elements' => new List<Object>{

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>HR_Can_Approve__c</fullName>
+    <label>HR Can Approve</label>
+    <type>Checkbox</type>
+    <defaultValue>false</defaultValue>
+    <description>When true, an active employee in the HR department may approve or reject any request, not only ones where they are the named approver. The decision is still recorded against whoever made it. Leave false to keep the reporting manager as the only approver.</description>
+</CustomField>

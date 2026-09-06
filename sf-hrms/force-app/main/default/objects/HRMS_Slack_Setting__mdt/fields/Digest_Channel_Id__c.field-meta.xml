@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Digest_Channel_Id__c</fullName>
+    <label>Digest Channel Id</label>
+    <type>Text</type>
+    <length>32</length>
+    <description>Channel that receives the daily who-is-out digest. Falls back to HR_Channel_Id__c when blank.</description>
+</CustomField>

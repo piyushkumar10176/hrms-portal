@@ -21,6 +21,7 @@ export interface SlackEmployee {
   Slack_User_Id__c: string | null;
   Reporting_Manager__c: string | null;
   Role__c: string | null;
+  Department__c: string | null;
 }
 
 /** Resolves a Slack member id to the Employee__c record it is mapped to. */
@@ -29,7 +30,7 @@ export async function employeeForSlackUser(
 ): Promise<SlackEmployee | null> {
   if (!/^[A-Z0-9]{5,20}$/i.test(slackUserId)) return null;
   const rows = await query<SlackEmployee>(`
-    SELECT Id, Name, Official_Email__c, Slack_User_Id__c, Reporting_Manager__c, Role__c
+    SELECT Id, Name, Official_Email__c, Slack_User_Id__c, Reporting_Manager__c, Role__c, Department__c
     FROM Employee__c
     WHERE Slack_User_Id__c = '${escapeSoqlString(slackUserId)}'
       AND Employee_Status__c = 'Active'
@@ -70,4 +71,17 @@ export function notLinkedMessage() {
     "Your Slack account is not linked to an employee record yet. " +
       "Ask HR to set your Slack user id on your employee profile."
   );
+}
+
+/**
+ * Whether this employee may decide requests they are not the named approver on.
+ *
+ * Mirrors HRMS_Slack_Setting__mdt.HR_Can_Approve__c on the Salesforce side. HR
+ * override is off unless HRMS_HR_CAN_APPROVE is set, so the reporting manager
+ * stays the only approver by default.
+ */
+export function canOverrideApproval(employee: SlackEmployee): boolean {
+  if (process.env.HRMS_HR_CAN_APPROVE !== "true") return false;
+  const hrDepartment = (process.env.HRMS_HR_DEPARTMENT ?? "HR").toLowerCase();
+  return (employee.Department__c ?? "").toLowerCase() === hrDepartment;
 }

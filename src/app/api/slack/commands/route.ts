@@ -23,9 +23,10 @@ import {
   getPendingApprovals,
   getTodayPunches,
   createPunch,
+  getAbsencesOn,
 } from "@/lib/salesforce-queries";
 import { toLeaveBalanceView } from "@/lib/leave-balance";
-import { businessTimeNow } from "@/lib/business-time";
+import { businessTimeNow, businessToday } from "@/lib/business-time";
 
 export const dynamic = "force-dynamic";
 
@@ -85,6 +86,9 @@ async function handleCommand(
         return;
       case "/approvals":
         await handleApprovals(employee.Id, responseUrl);
+        return;
+      case "/whosout":
+        await handleWhosOut(responseUrl);
         return;
       default:
         await postToResponseUrl(responseUrl, ephemeral(`Unknown command ${command}`));
@@ -245,6 +249,45 @@ async function handleAttendance(
     responseUrl,
     ephemeral("Try `/attendance in`, `/attendance out` or `/attendance today`.")
   );
+}
+
+/** Who is on approved leave today, visible to anyone who asks. */
+async function handleWhosOut(responseUrl: string): Promise<void> {
+  const today = businessToday();
+  const absences = await getAbsencesOn(today);
+
+  if (absences.length === 0) {
+    await postToResponseUrl(responseUrl, {
+      response_type: "ephemeral",
+      blocks: [
+        { type: "header", text: { type: "plain_text", text: `Who is out, ${today}` } },
+        { type: "section", text: { type: "mrkdwn", text: "Nobody is on approved leave today." } },
+      ],
+    });
+    return;
+  }
+
+  const lines = absences
+    .map((a) => {
+      const span = a.From_Date__c === a.To_Date__c ? "today" : `${a.From_Date__c} to ${a.To_Date__c}`;
+      const half = a.Half_Day__c ? " (half day)" : "";
+      return `• *${a.Employee__r?.Name ?? "Unknown"}* — ${a.Leave_Type__r?.Name ?? "Leave"}${half}, ${span}`;
+    })
+    .join("\n");
+
+  await postToResponseUrl(responseUrl, {
+    response_type: "ephemeral",
+    blocks: [
+      { type: "header", text: { type: "plain_text", text: `Who is out, ${today}` } },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `${absences.length} ${absences.length === 1 ? "person is" : "people are"} out:\n${lines}`,
+        },
+      },
+    ],
+  });
 }
 
 async function handleApprovals(employeeId: string, responseUrl: string): Promise<void> {

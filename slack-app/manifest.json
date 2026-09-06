@@ -29,6 +29,12 @@
         "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
         "description": "Requests waiting on your decision",
         "should_escape": false
+      },
+      {
+        "command": "/whosout",
+        "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
+        "description": "Who is on leave today",
+        "should_escape": false
       }
     ]
   },

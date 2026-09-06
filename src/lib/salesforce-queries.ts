@@ -763,3 +763,22 @@ export interface SFTeamLeaveEntry {
   To_Date__c?: string | null;
   Status__c?: string | null;
 }
+
+/** Everyone whose approved leave covers the given date. */
+export async function getAbsencesOn(isoDate: string) {
+  return query<{
+    Id: string;
+    Employee__r?: { Name?: string } | null;
+    Leave_Type__r?: { Name?: string } | null;
+    From_Date__c: string | null;
+    To_Date__c: string | null;
+    Half_Day__c: boolean | null;
+  }>(`
+    SELECT Id, Employee__r.Name, Leave_Type__r.Name, From_Date__c, To_Date__c, Half_Day__c
+    FROM Leave_Request__c
+    WHERE Status__c = 'Approved'
+      AND From_Date__c <= ${isoDate}
+      AND To_Date__c >= ${isoDate}
+    ORDER BY Employee__r.Name
+  `);
+}
