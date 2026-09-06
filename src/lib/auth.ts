@@ -11,6 +11,7 @@ import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { queryOneOrNull, updateRecord } from "./salesforce";
 import { escapeSoqlString } from "./soql";
+import { verifyCaptcha } from "./captcha";
 import { authConfig } from "./auth.config";
 
 /** Consecutive failures before the account is locked. */
@@ -58,12 +59,21 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        captchaToken: { label: "Captcha", type: "text" },
       },
       async authorize(credentials) {
         const email = credentials?.email as string;
         const password = credentials?.password as string;
 
         if (!email || !password) return null;
+
+        // Verified before any database work, so a bot cannot use the login form
+        // to probe which addresses exist. Inert until Turnstile is configured.
+        const captcha = await verifyCaptcha(credentials?.captchaToken as string | undefined);
+        if (!captcha.ok) {
+          console.warn("[auth] captcha rejected:", captcha.reason);
+          return null;
+        }
 
         try {
           // Strict email regex to prevent SOQL injection
@@ -122,15 +132,15 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             return null;
           }
 
-          if ((emp.Failed_Login_Attempts__c ?? 0) > 0 || emp.Lockout_Until__c) {
-            try {
-              await updateRecord("Employee__c", emp.Id, {
-                Failed_Login_Attempts__c: 0,
-                Lockout_Until__c: null,
-              });
-            } catch (recordErr) {
-              console.error("[Auth] Could not reset failed attempts:", recordErr);
-            }
+          // Record the sign-in, and clear any lockout counters it succeeded past.
+          try {
+            await updateRecord("Employee__c", emp.Id, {
+              Failed_Login_Attempts__c: 0,
+              Lockout_Until__c: null,
+              Last_Login_At__c: new Date().toISOString(),
+            });
+          } catch (recordErr) {
+            console.error("[Auth] Could not record the sign-in:", recordErr);
           }
 
           return {

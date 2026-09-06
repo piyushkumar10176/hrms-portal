@@ -4,7 +4,13 @@ export const authConfig = {
   pages: {
     signIn: "/login",
   },
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    // Eight hours rather than the thirty day default: a shared or unattended
+    // machine should not stay signed in to HR data for a month.
+    maxAge: 60 * 60 * 8,
+    updateAge: 60 * 15,
+  },
   trustHost: true,
   secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET,
   providers: [], // we add credentials in auth.ts

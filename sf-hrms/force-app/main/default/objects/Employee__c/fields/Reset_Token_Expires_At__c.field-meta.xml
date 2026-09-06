@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Reset_Token_Expires_At__c</fullName>
+    <label>Reset Token Expires At</label>
+    <type>DateTime</type>
+    <description>When the password reset link stops working. Short lived by design.</description>
+</CustomField>

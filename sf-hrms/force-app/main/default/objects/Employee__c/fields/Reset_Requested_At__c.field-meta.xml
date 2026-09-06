@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Reset_Requested_At__c</fullName>
+    <label>Reset Requested At</label>
+    <type>DateTime</type>
+    <description>When a reset was last requested, used to throttle repeat requests for the same account.</description>
+</CustomField>

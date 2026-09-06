@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Last_Login_At__c</fullName>
+    <label>Last Login At</label>
+    <type>DateTime</type>
+    <description>When this employee last signed in to the portal. Useful for spotting dormant accounts and confirming an invite was used.</description>
+</CustomField>

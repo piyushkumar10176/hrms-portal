@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Invite_Token_Hash__c</fullName>
+    <label>Invite Token Hash</label>
+    <type>Text</type>
+    <length>128</length>
+    <description>SHA-256 of the invite token. Replaces storing the raw token, so a database read cannot be replayed as an invite link.</description>
+</CustomField>

@@ -14,7 +14,7 @@ export const proxy = withAuth((req) => {
   // Public routes: accessible without a session. /api/slack is public because
   // Slack authenticates itself by signing each request, which the routes verify
   // before reading the payload.
-  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/setup-password") || pathname.startsWith("/api/setup-password") || pathname.startsWith("/api/webhook") || pathname.startsWith("/api/slack") || pathname.startsWith("/_next") || pathname === "/favicon.ico" || pathname === "/manifest.json" || pathname.startsWith("/icons") || pathname === "/sw.js") {
+  if (pathname.startsWith("/login") || pathname.startsWith("/api/auth") || pathname.startsWith("/setup-password") || pathname.startsWith("/api/setup-password") || pathname.startsWith("/forgot-password") || pathname.startsWith("/api/forgot-password") || pathname.startsWith("/reset-password") || pathname.startsWith("/api/reset-password") || pathname.startsWith("/api/webhook") || pathname.startsWith("/api/slack") || pathname.startsWith("/_next") || pathname === "/favicon.ico" || pathname === "/manifest.json" || pathname.startsWith("/icons") || pathname === "/sw.js") {
     return NextResponse.next();
   }
 

@@ -1,15 +1,19 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { Turnstile } from "@/components/auth/turnstile";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
   const router = useRouter();
+  const handleToken = useCallback((token: string) => setCaptchaToken(token), []);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -17,11 +21,15 @@ export default function LoginPage() {
     setError("");
 
     const result = await signIn("credentials", {
-      email, password, redirect: false,
+      email, password, captchaToken, redirect: false,
     });
 
     if (result?.error) {
-      setError("Invalid credentials. Check demo accounts below.");
+      // Deliberately identical whether the address is unknown, the password is
+      // wrong, or the account is locked. Saying which would let someone learn
+      // who works here and whether they have guessed a real address.
+      setError("That email and password combination did not work. After several failed attempts an account is locked for 15 minutes.");
+      setCaptchaToken("");
     } else {
       router.push("/dashboard");
     }
@@ -50,22 +58,29 @@ export default function LoginPage() {
           <div className="text-center mb-8">
             <div className="w-14 h-14 rounded-2xl bg-indigo-600 flex items-center justify-center text-white text-2xl font-bold mx-auto mb-4">H</div>
             <h2 className="text-2xl font-bold text-gray-900">Welcome back</h2>
-            <p className="text-gray-500 mt-1">Sign in to your account</p>
+            <p className="text-gray-500 mt-1">Sign in to the HRMS portal</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
-                placeholder="admin@example.com"
+                placeholder="you@cloudsheer.com" autoComplete="username"
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+              <div className="flex items-baseline justify-between mb-1">
+                <label className="block text-sm font-medium text-gray-700">Password</label>
+                <Link href="/forgot-password" className="text-sm text-indigo-600 hover:text-indigo-700 hover:underline">
+                  Forgot password?
+                </Link>
+              </div>
               <input type="password" value={password} onChange={e => setPassword(e.target.value)} required
-                placeholder="Enter password"
+                placeholder="Enter password" autoComplete="current-password"
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none" />
             </div>
+
+            <Turnstile onToken={handleToken} />
 
             {error && <p className="text-red-600 text-sm bg-red-50 px-3 py-2 rounded-lg">{error}</p>}
 
@@ -75,12 +90,9 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 bg-gray-50 rounded-lg p-4 text-xs text-gray-500">
-            <p className="font-medium text-gray-700 mb-2">Demo Accounts:</p>
-            <p><strong>Admin:</strong> admin@example.com / admin123</p>
-            <p><strong>Employee:</strong> priya@example.com / emp123</p>
-            <p><strong>Employee:</strong> rahul@example.com / emp123</p>
-          </div>
+          <p className="mt-6 text-center text-sm text-gray-500">
+            No account yet? Your invitation is sent by email when HR adds you.
+          </p>
         </div>
       </div>
     </div>
