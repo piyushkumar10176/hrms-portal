@@ -55,7 +55,7 @@
         "app_mention"
       ]
     },
-    "org_deploy_enabled": false,
+    "org_deploy_enabled": true,
     "socket_mode_enabled": false,
     "token_rotation_enabled": false
   }
