@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getEmployeeById, getHistoryRecords } from "@/lib/salesforce-queries";
 import { updateRecord, extractValidationMessage } from "@/lib/salesforce";
+import {
+  toRole,
+  canSeeSensitiveFields,
+  canSeeEmploymentHistory,
+  canManageEmployees,
+} from "@/lib/authz";
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -10,12 +16,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const resolvedParams = await params;
   const id = resolvedParams.id;
 
-  // Authorization: sensitive personal and financial identifiers are visible only to
-  // the employee themselves or to an admin. Every other authenticated viewer gets the
-  // colleague-visible subset used by the profile page and org chart.
-  const isSelf = session.user.id === id;
-  const isAdmin = session.user.role === "admin";
-  const canSeeSensitive = isSelf || isAdmin;
+  // Every permission decision comes from lib/authz so the rules live in one place.
+  const actor = { id: session.user.id, role: toRole(session.user.role) };
+  const canSeeSensitive = canSeeSensitiveFields(actor, id);
 
   try {
     const sfEmp = await getEmployeeById(id);
@@ -50,9 +53,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       publicEmp.aadharNumber = sfEmp.Aadhaar__c;
     }
 
-    // Employment history is visible to the employee, an admin, or their reporting manager.
-    const isManager = sfEmp.Reporting_Manager__c === session.user.id;
-    const history = canSeeSensitive || isManager ? await getHistoryRecords(id) : [];
+    const history = canSeeEmploymentHistory(actor, id, sfEmp.Reporting_Manager__c ?? null)
+      ? await getHistoryRecords(id)
+      : [];
 
     return NextResponse.json({ employee: publicEmp, history });
   } catch (err) {
@@ -63,7 +66,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
-  if (!session?.user || session.user.role !== "admin") {
+  if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!canManageEmployees({ id: session.user.id, role: toRole(session.user.role) })) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

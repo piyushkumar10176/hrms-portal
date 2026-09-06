@@ -3,6 +3,7 @@
     <fullName>Role__c</fullName>
     <externalId>false</externalId>
     <label>Role</label>
+    <description>Employee is the default. HR may approve and reject any request and see company-wide HR data. Admin adds employee and configuration management. Held on the record rather than inferred from department, so moving team does not change what someone can do.</description>
     <required>false</required>
     <trackTrending>false</trackTrending>
     <type>Picklist</type>
@@ -14,6 +15,11 @@
                 <fullName>Employee</fullName>
                 <default>true</default>
                 <label>Employee</label>
+            </value>
+            <value>
+                <fullName>HR</fullName>
+                <default>false</default>
+                <label>HR</label>
             </value>
             <value>
                 <fullName>Admin</fullName>

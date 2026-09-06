@@ -11,7 +11,8 @@
 
 import { NextRequest, NextResponse, after } from "next/server";
 import { verifySlackRequest } from "@/lib/slack-verify";
-import { employeeForSlackUser, ephemeral, postToResponseUrl, canOverrideApproval, type SlackEmployee } from "@/lib/slack";
+import { employeeForSlackUser, ephemeral, postToResponseUrl, actorFor, type SlackEmployee } from "@/lib/slack";
+import { canDecideRequest } from "@/lib/authz";
 import {
   getLeaveTypes,
   getLeaveBalances,
@@ -224,14 +225,9 @@ async function decideRequest(
 
   if (!record) return { decided: false, message: "That request no longer exists." };
 
-  const isApprover = record.Approver__c === actor.Id;
-  const isHrOverride = canOverrideApproval(actor);
-  if (!isApprover && !isHrOverride) {
-    return { decided: false, message: "You are not the approver for that request." };
-  }
-  // Approving your own leave is refused even for HR.
-  if (record.Employee__c === actor.Id) {
-    return { decided: false, message: "You cannot decide your own request." };
+  const verdict = canDecideRequest(actorFor(actor), record.Approver__c, record.Employee__c);
+  if (!verdict.allowed) {
+    return { decided: false, message: verdict.reason ?? "You cannot decide that request." };
   }
   if (record.Status__c !== "Submitted") {
     return { decided: false, message: `That request is already ${record.Status__c}.` };
@@ -240,9 +236,9 @@ async function decideRequest(
   await updateRecord(objectName, id, { Status__c: decision });
   return {
     decided: true,
-    message: isApprover
-      ? `${label} ${decision.toLowerCase()}.`
-      : `${label} ${decision.toLowerCase()} as an HR override.`,
+    message: verdict.asOverride
+      ? `${label} ${decision.toLowerCase()} on the approver's behalf.`
+      : `${label} ${decision.toLowerCase()}.`,
   };
 }
 

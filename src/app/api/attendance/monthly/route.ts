@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { getMonthlyAttendance } from "@/lib/salesforce-queries";
 import { getSessionEmployee, StaleSessionError } from "@/lib/session-employee";
+import { toRole, canSeeCompanyWideData } from "@/lib/authz";
+import { isSalesforceId } from "@/lib/soql";
 
 export async function GET(req: NextRequest) {
   const session = await auth();
@@ -12,9 +14,12 @@ export async function GET(req: NextRequest) {
   const month = parseInt(searchParams.get("month") || String(new Date().getMonth()));
   
   try {
-    const targetId = session.user.role === "admin" && searchParams.get("employeeId") 
-      ? searchParams.get("employeeId")! 
-      : (await getSessionEmployee(session)).Id;
+    // Reading someone else's attendance requires HR or admin. Anyone else is
+    // silently given their own, and a malformed id is never passed to SOQL.
+    const requested = searchParams.get("employeeId");
+    const actor = { id: session.user.id, role: toRole(session.user.role) };
+    const mayReadOthers = canSeeCompanyWideData(actor) && requested && isSalesforceId(requested);
+    const targetId = mayReadOthers ? requested : (await getSessionEmployee(session)).Id;
     
     const sfRecords = await getMonthlyAttendance(targetId, year, month + 1); // JS month is 0-indexed, SF expects 1-12
     const records = sfRecords.map(r => ({

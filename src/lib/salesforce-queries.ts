@@ -883,3 +883,29 @@ export async function getCancellableRequests(employeeId: string, isoToday: strin
     LIMIT 20
   `);
 }
+
+/** Every request awaiting a decision, regardless of approver. For HR and admin. */
+export async function getAllPendingApprovals() {
+  return query<SFLeaveRequest>(`
+    SELECT Id, Name, Employee__c, Employee__r.Name, Leave_Type__r.Name,
+           From_Date__c, To_Date__c, Days__c, Half_Day__c, Half_Day_Session__c,
+           Reason__c, Status__c, Approver__c, Approver__r.Name, CreatedDate
+    FROM Leave_Request__c
+    WHERE Status__c = 'Submitted'
+    ORDER BY CreatedDate ASC
+    LIMIT 50
+  `);
+}
+
+/** Every regularization awaiting a decision, regardless of approver. */
+export async function getAllPendingRegularizations() {
+  return query<SFApprovalRequest>(`
+    SELECT Id, Name, Employee__c, Employee__r.Name, Date__c,
+           Requested_Clock_In__c, Requested_Clock_Out__c, Reason__c,
+           Status__c, Approver__c, CreatedDate
+    FROM Regularization_Request__c
+    WHERE Status__c = 'Submitted'
+    ORDER BY CreatedDate ASC
+    LIMIT 50
+  `);
+}

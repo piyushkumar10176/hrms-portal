@@ -13,6 +13,7 @@
 
 import { query } from "./salesforce";
 import { escapeSoqlString } from "./soql";
+import { toRole, type Actor } from "./authz";
 
 export interface SlackEmployee {
   Id: string;
@@ -73,15 +74,7 @@ export function notLinkedMessage() {
   );
 }
 
-/**
- * Whether this employee may decide requests they are not the named approver on.
- *
- * Mirrors HRMS_Slack_Setting__mdt.HR_Can_Approve__c on the Salesforce side. HR
- * override is off unless HRMS_HR_CAN_APPROVE is set, so the reporting manager
- * stays the only approver by default.
- */
-export function canOverrideApproval(employee: SlackEmployee): boolean {
-  if (process.env.HRMS_HR_CAN_APPROVE !== "true") return false;
-  const hrDepartment = (process.env.HRMS_HR_DEPARTMENT ?? "HR").toLowerCase();
-  return (employee.Department__c ?? "").toLowerCase() === hrDepartment;
+/** The actor shape lib/authz works with, built from an Employee__c record. */
+export function actorFor(employee: SlackEmployee): Actor {
+  return { id: employee.Id, role: toRole(employee.Role__c) };
 }

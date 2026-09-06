@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import { authConfig } from "@/lib/auth.config";
 import { NextResponse } from "next/server";
+import { toRole, isHrOrAdmin, isAdmin } from "@/lib/authz";
 
 // Next.js 16 renamed the middleware file convention to `proxy`. While running as
 // `src/middleware.ts` this file was compiled but never executed, so every page and
@@ -47,7 +48,14 @@ export const proxy = withAuth((req) => {
       pathname.endsWith("/me") ||
       (pathname.match(/^\/api\/employees\/[^/]+$/) && req.method === "GET");
     
-    if (req.auth?.user?.role !== "admin" && !isException) {
+    const actor = { id: req.auth?.user?.id ?? "", role: toRole(req.auth?.user?.role) };
+
+    // /api/salary and the admin pages are configuration, so admin only.
+    // Everything else behind the admin gate is HR-visible company data.
+    const adminOnly = pathname.startsWith("/admin/") || pathname.startsWith("/api/admin");
+    const permitted = adminOnly ? isAdmin(actor) : isHrOrAdmin(actor);
+
+    if (!permitted && !isException) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
   }

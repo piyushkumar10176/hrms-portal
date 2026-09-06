@@ -16,7 +16,9 @@ import {
   ephemeral,
   notLinkedMessage,
   postToResponseUrl,
+  actorFor,
 } from "@/lib/slack";
+import { canSeeCompanyWideData } from "@/lib/authz";
 import {
   getLeaveBalances,
   getLeaveRequests,
@@ -30,6 +32,8 @@ import {
   getPenaltySummary,
   getPendingRegularizationApprovals,
   getCancellableRequests,
+  getAllPendingApprovals,
+  getAllPendingRegularizations,
 } from "@/lib/salesforce-queries";
 import { toLeaveBalanceView } from "@/lib/leave-balance";
 import { businessTimeNow, businessToday } from "@/lib/business-time";
@@ -91,7 +95,7 @@ async function handleCommand(
         await handleAttendance(text, employee.Id, responseUrl);
         return;
       case "/approvals":
-        await handleApprovals(employee.Id, responseUrl);
+        await handleApprovals(employee, responseUrl);
         return;
       case "/whosout":
         await handleWhosOut(responseUrl);
@@ -468,11 +472,24 @@ async function handleDashboard(responseUrl: string): Promise<void> {
   });
 }
 
-async function handleApprovals(employeeId: string, responseUrl: string): Promise<void> {
-  const [leave, regularizations] = await Promise.all([
-    getPendingApprovals(employeeId),
-    getPendingRegularizationApprovals(employeeId).catch(() => []),
-  ]);
+async function handleApprovals(
+  employee: Awaited<ReturnType<typeof employeeForSlackUser>>,
+  responseUrl: string
+): Promise<void> {
+  if (!employee) return;
+
+  // HR and admin see everything awaiting a decision, so cover is never blocked
+  // by a manager being away. Everyone else sees only what is theirs to decide.
+  const companyWide = canSeeCompanyWideData(actorFor(employee));
+  const [leave, regularizations] = companyWide
+    ? await Promise.all([
+        getAllPendingApprovals(),
+        getAllPendingRegularizations().catch(() => []),
+      ])
+    : await Promise.all([
+        getPendingApprovals(employee.Id),
+        getPendingRegularizationApprovals(employee.Id).catch(() => []),
+      ]);
 
   if (leave.length === 0 && regularizations.length === 0) {
     await postToResponseUrl(responseUrl, ephemeral("Nothing is waiting on you."));
@@ -481,8 +498,25 @@ async function handleApprovals(employeeId: string, responseUrl: string): Promise
 
   // Slack truncates past 50 blocks with no error, so cap each list and say so.
   const blocks: unknown[] = [
-    { type: "header", text: { type: "plain_text", text: "Waiting for your decision" } },
+    {
+      type: "header",
+      text: {
+        type: "plain_text",
+        text: companyWide ? "Everything awaiting a decision" : "Waiting for your decision",
+      },
+    },
   ];
+  if (companyWide) {
+    blocks.push({
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text: "You can see and action every request. Deciding one that is not yours is recorded as acting on the approver's behalf.",
+        },
+      ],
+    });
+  }
 
   const shownLeave = leave.slice(0, 8);
   for (const request of shownLeave) {
@@ -493,6 +527,7 @@ async function handleApprovals(employeeId: string, responseUrl: string): Promise
         text:
           `:palm_tree: *${request.Employee__r?.Name ?? "Employee"}* — ${request.Leave_Type__r?.Name ?? "Leave"}\n` +
           `${request.From_Date__c} to ${request.To_Date__c} (${request.Days__c} day(s))` +
+          (companyWide && request.Approver__r?.Name ? `\napprover: ${request.Approver__r.Name}` : "") +
           (request.Reason__c ? `\n_${request.Reason__c}_` : ""),
       },
     });
