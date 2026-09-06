@@ -9,7 +9,7 @@
  * minutes. No business rules live here; Salesforce owns those.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifySlackRequest } from "@/lib/slack-verify";
 import {
   employeeForSlackUser,
@@ -50,7 +50,14 @@ export async function POST(req: NextRequest) {
 
   // Answer Slack straight away, then do the work and post the result. Doing the
   // Salesforce round trip inline risks blowing the 3 second budget.
-  void handleCommand(command, text, slackUserId, responseUrl);
+  //
+  // This must be after(), not a bare floating promise. On serverless the
+  // invocation is frozen once the response is returned, so fire-and-forget work
+  // is silently dropped: Slack showed "Working on it…" and nothing ever
+  // followed. after() keeps the invocation alive until the callback settles.
+  after(async () => {
+    await handleCommand(command, text, slackUserId, responseUrl);
+  });
 
   return NextResponse.json(ephemeral("Working on it…"));
 }

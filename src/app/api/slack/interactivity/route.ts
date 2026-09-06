@@ -9,7 +9,7 @@
  * Salesforce-facing helpers so Slack and the portal cannot drift apart.
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifySlackRequest } from "@/lib/slack-verify";
 import { employeeForSlackUser, ephemeral, postToResponseUrl } from "@/lib/slack";
 import { getLeaveTypes, getLeaveBalances, getHolidays } from "@/lib/salesforce-queries";
@@ -51,7 +51,11 @@ export async function POST(req: NextRequest) {
     return handleViewSubmission(payload);
   }
 
-  void handleAction(payload);
+  // after() rather than a floating promise: serverless freezes the invocation
+  // once the response is sent, which would drop the work entirely.
+  after(async () => {
+    await handleAction(payload);
+  });
   return new NextResponse(null, { status: 200 });
 }
 

@@ -40,7 +40,13 @@
         "im:write",
         "users:read",
         "users:read.email",
-        "app_mentions:read"
+        "app_mentions:read",
+        "channels:read",
+        "channels:manage",
+        "channels:join",
+        "groups:read",
+        "chat:write.public",
+        "im:history"
       ]
     }
   },
