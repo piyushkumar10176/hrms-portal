@@ -69,7 +69,8 @@ async function handleCommand(
     }
 
     switch (command) {
-      case "/leave":
+      // Slack reserves /leave for leaving a channel, so the app registers /myleave.
+      case "/myleave":
         await handleLeave(text, employee.Id, responseUrl);
         return;
       case "/attendance":
@@ -175,7 +176,7 @@ async function handleLeave(
 
   await postToResponseUrl(
     responseUrl,
-    ephemeral("Try `/leave balance`, `/leave apply` or `/leave status`.")
+    ephemeral("Try `/myleave balance`, `/myleave apply` or `/myleave status`.")
   );
 }
 

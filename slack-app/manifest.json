@@ -1,0 +1,62 @@
+{
+  "display_information": {
+    "name": "CloudSheer HRMS",
+    "description": "Leave, attendance and approvals, backed by Salesforce",
+    "background_color": "#1a237e"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "CloudSheer HRMS",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/myleave",
+        "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
+        "description": "Your leave balance, apply for leave, or check status",
+        "usage_hint": "balance | apply | status",
+        "should_escape": false
+      },
+      {
+        "command": "/attendance",
+        "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
+        "description": "Clock in, clock out, or today's punches",
+        "usage_hint": "in | out | today",
+        "should_escape": false
+      },
+      {
+        "command": "/approvals",
+        "url": "https://hrms-portal-cyan.vercel.app/api/slack/commands",
+        "description": "Requests waiting on your decision",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "commands",
+        "im:write",
+        "users:read",
+        "users:read.email",
+        "app_mentions:read"
+      ]
+    }
+  },
+  "settings": {
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://hrms-portal-cyan.vercel.app/api/slack/interactivity"
+    },
+    "event_subscriptions": {
+      "request_url": "https://hrms-portal-cyan.vercel.app/api/slack/events",
+      "bot_events": [
+        "app_mention"
+      ]
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
