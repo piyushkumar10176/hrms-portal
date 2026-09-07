@@ -9,6 +9,7 @@ Four documents. Start with the one that matches the question you have.
 | [KEKA_PARITY.md](KEKA_PARITY.md) | How this compares against Keka module by module, and what the decision to leave Keka actually involves |
 | [HRMS_BUILD_REFERENCE.md](HRMS_BUILD_REFERENCE.md) | How the system works: architecture, permissions, punching in, applying for leave, Slack design, configuration |
 | [DATA_MODEL.md](DATA_MODEL.md) | The objects, how they relate, and which fields are derived rather than entered |
+| [DECISIONS.md](DECISIONS.md) | Settled choices and the reasoning behind them |
 
 All four were compiled on **6 September 2026** against the live org and the
 deployed portal. Row counts drift as the system is used; the shape does not.

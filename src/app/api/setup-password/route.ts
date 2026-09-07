@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { queryOneOrNull, updateRecord } from "@/lib/salesforce";
 import { hashSync } from "bcryptjs";
 import { escapeSoqlString } from "@/lib/soql";
+import { hashToken, isExpired, validatePassword } from "@/lib/tokens";
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,15 +11,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Token and password are required" }, { status: 400 });
     }
 
-    if (password.length < 8) {
-      return NextResponse.json({ error: "Password must be at least 8 characters" }, { status: 400 });
+    // The same rules the reset flow applies, rather than a bare length check.
+    const weakness = validatePassword(password);
+    if (weakness) {
+      return NextResponse.json({ error: weakness }, { status: 400 });
     }
 
-    // Find employee by invite token + check expiry
+    // Looked up by hash. The token itself is never stored, so a reader of
+    // Employee records cannot claim an account before its owner does.
     const emp = await queryOneOrNull<{ Id: string; Invite_Token_Expires_At__c: string }>(`
       SELECT Id, Invite_Token_Expires_At__c
       FROM Employee__c
-      WHERE Invite_Token__c = '${escapeSoqlString(token)}'
+      WHERE Invite_Token_Hash__c = '${escapeSoqlString(hashToken(token))}'
         AND Employee_Status__c = 'Active'
       LIMIT 1
     `);
@@ -27,18 +31,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Invalid or expired token" }, { status: 400 });
     }
 
-    // Validate token expiry
-    if (emp.Invite_Token_Expires_At__c) {
-      const expiresAt = new Date(emp.Invite_Token_Expires_At__c);
-      if (expiresAt < new Date()) {
-        return NextResponse.json({ error: "Token has expired. Please request a new invitation." }, { status: 400 });
-      }
+    if (isExpired(emp.Invite_Token_Expires_At__c)) {
+      return NextResponse.json(
+        { error: "That invitation has expired. Ask HR to send a new one." },
+        { status: 400 }
+      );
     }
 
-    // Hash password and save to SF; clear token
+    // Hash password and save to SF; burn the token so the link is single use.
     const hash = hashSync(password, 10);
     await updateRecord("Employee__c", emp.Id, {
       Password_Hash__c: hash,
+      Invite_Token_Hash__c: null,
       Invite_Token__c: null,
       Invite_Token_Expires_At__c: null,
       Password_Changed_At__c: new Date().toISOString(),

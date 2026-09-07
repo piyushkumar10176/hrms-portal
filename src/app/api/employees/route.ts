@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { createRecord } from "@/lib/salesforce";
 import { getAllEmployees } from "@/lib/salesforce-queries";
-import { randomUUID } from "crypto";
+import { issueInvite } from "@/lib/invite";
 
 export const dynamic = "force-dynamic";
 
@@ -47,10 +47,17 @@ export async function POST(req: NextRequest) {
   }
 
   const body = await req.json();
-  const token = randomUUID();
-  // Token expires in 7 days
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  
+
+  // Minimum needed to create a usable record. Everything else can be filled in
+  // afterwards on the employee's own record, which is how HR actually works: the
+  // name and address arrive first, the bank details and identifiers later.
+  if (!body.firstName || !body.lastName || !body.email) {
+    return NextResponse.json(
+      { error: "First name, last name and email are required." },
+      { status: 400 }
+    );
+  }
+
   try {
     const sfId = await createRecord("Employee__c", {
       First_Name__c: body.firstName,
@@ -71,26 +78,27 @@ export async function POST(req: NextRequest) {
       Role__c: body.role === "admin" ? "Admin" : "Employee",
       Employee_Status__c: "Active",
       Gender__c: body.gender,
-      Invite_Token__c: token,
-      Invite_Token_Expires_At__c: expiresAt,
     });
-    
-    const baseUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin;
-    const inviteLink = `${baseUrl}/setup-password/${token}`;
 
-    if (process.env.NODE_ENV !== "production") {
-      console.log(`\n============================`);
-      console.log(`📧 INVITE SENT TO: ${body.email}`);
-      console.log(`Subject: Welcome to HRMS! Please setup your account`);
-      console.log(`Body: Click here to set your password and log in: ${inviteLink}`);
-      console.log(`Salesforce Record ID: ${sfId}`);
-      console.log(`Token expires: ${expiresAt}`);
-      console.log(`============================\n`);
-    }
+    // The invite is issued and actually emailed. This route previously built a
+    // link and wrote it to the log only outside production, so in production a
+    // new employee could never learn how to set their password.
+    const invite = await issueInvite(
+      sfId,
+      body.firstName,
+      body.email,
+      req.nextUrl.origin
+    );
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       employee: { id: sfId, firstName: body.firstName, lastName: body.lastName, email: body.email },
-      inviteLink,
+      // Returned so an admin can pass the link on by hand while no mail
+      // provider is configured. It is shown to an admin who just created the
+      // record, and to nobody else.
+      inviteLink: invite.link,
+      inviteExpiresAt: invite.expiresAt,
+      inviteEmailed: invite.email.sent,
+      inviteEmailError: invite.email.sent ? undefined : invite.email.error,
       source: "salesforce"
     }, { status: 201 });
 

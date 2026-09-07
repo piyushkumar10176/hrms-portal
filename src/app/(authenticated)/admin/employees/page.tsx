@@ -86,13 +86,41 @@ export default function AdminEmployeesPage() {
       fetchEmployees();
       setShowForm(false);
       setEditingId(null);
-      setMsg({
-        text: data.inviteLink 
-          ? `Added ${data.employee.firstName}! An email was sent. Invite Link: ${data.inviteLink}` 
-          : `${data.employee.firstName} ${editingId ? "updated" : "added"} successfully!`, 
-        type: "success"
-      });
+      setMsg(describeInvite(data, editingId ? "updated" : "added"));
     } else { setMsg({text: data.error, type: "error"}); }
+  };
+
+  /** Says what actually happened, including when the email could not be sent. */
+  const describeInvite = (
+    data: { employee?: { firstName?: string }; inviteLink?: string; inviteEmailed?: boolean; hadPassword?: boolean },
+    verb: string
+  ): { text: string; type: "success" | "error" } => {
+    const who = data.employee?.firstName ?? "That employee";
+    if (!data.inviteLink) {
+      return { text: `${who} ${verb} successfully.`, type: "success" };
+    }
+    if (data.inviteEmailed) {
+      return { text: `${who} ${verb}. The invitation has been emailed to them.`, type: "success" };
+    }
+    // No mail provider is configured, so the link has to be passed on by hand.
+    // Showing it is the difference between a usable account and a dead record.
+    return {
+      text:
+        `${who} ${verb}, but no email could be sent because no mail provider is ` +
+        `configured. Send them this link yourself, it expires in 3 days: ${data.inviteLink}`,
+      type: "error",
+    };
+  };
+
+  const resendInvite = async (emp: Employee) => {
+    setMsg(null);
+    const res = await fetch(`/api/employees/${emp.id}/invite`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      setMsg({ text: data.error || "Could not issue the invitation.", type: "error" });
+      return;
+    }
+    setMsg(describeInvite({ ...data, employee: { firstName: emp.firstName } }, "re-invited"));
   };
 
   const openEdit = (emp: Employee) => {
@@ -268,10 +296,17 @@ export default function AdminEmployeesPage() {
                           {e.role}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
                         <button onClick={(ev) => { ev.stopPropagation(); openEdit(e); }} className="text-indigo-600 hover:text-indigo-800 font-medium px-3 py-1 bg-indigo-50 rounded hover:bg-indigo-100 transition-colors">
                           Edit
                         </button>
+                        {isAdmin && (
+                          <button onClick={(ev) => { ev.stopPropagation(); resendInvite(e); }}
+                            title="Issue a fresh portal invitation. Any earlier one stops working."
+                            className="ml-2 text-gray-600 hover:text-gray-900 font-medium px-3 py-1 bg-gray-50 rounded hover:bg-gray-100 transition-colors">
+                            Invite
+                          </button>
+                        )}
                       </td>
                     </tr>
                   );

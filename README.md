@@ -15,6 +15,7 @@ not fit in a chat window.
 | [docs/KEKA_PARITY.md](docs/KEKA_PARITY.md) | How this compares against Keka, module by module |
 | [docs/HRMS_BUILD_REFERENCE.md](docs/HRMS_BUILD_REFERENCE.md) | How the system works, in detail |
 | [docs/DATA_MODEL.md](docs/DATA_MODEL.md) | Objects, relationships and derived fields |
+| [docs/DECISIONS.md](docs/DECISIONS.md) | Settled choices and why, so they are not re-opened blind |
 
 ## Layout
 
