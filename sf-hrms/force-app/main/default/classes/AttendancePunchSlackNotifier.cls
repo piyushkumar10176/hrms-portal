@@ -82,7 +82,8 @@ public with sharing class AttendancePunchSlackNotifier implements Queueable, Dat
 
         List<Attendance_Punch__c> punches = [
             SELECT Id, Punch_DateTime__c, Punch_Type__c, Source__c,
-                   Employee__c, Employee__r.Name, Employee__r.Slack_User_Id__c
+                   Employee__c, Employee__r.Name, Employee__r.Employee_Code__c,
+                   Employee__r.Slack_User_Id__c
             FROM Attendance_Punch__c
             WHERE Id IN :punchIds
             ORDER BY Punch_DateTime__c ASC
@@ -155,7 +156,20 @@ public with sharing class AttendancePunchSlackNotifier implements Queueable, Dat
 
     @TestVisible
     private static String buildFallback(Attendance_Punch__c punch) {
-        return (isCheckIn(punch) ? 'Clocked in at ' : 'Clocked out at ') + punchTime(punch);
+        return employeeName(punch) +
+               (isCheckIn(punch) ? ' clocked in at ' : ' clocked out at ') +
+               punchTime(punch);
+    }
+
+    /** The name on the punch, for messages that must say whose punch this is. */
+    private static String employeeName(Attendance_Punch__c punch) {
+        return punch.Employee__r == null || String.isBlank(punch.Employee__r.Name)
+            ? 'Unknown employee'
+            : punch.Employee__r.Name;
+    }
+
+    private static String employeeCode(Attendance_Punch__c punch) {
+        return punch.Employee__r == null ? null : punch.Employee__r.Employee_Code__c;
     }
 
     /**
@@ -171,7 +185,9 @@ public with sharing class AttendancePunchSlackNotifier implements Queueable, Dat
         blocks.add(new Map<String, Object>{
             'type' => 'section',
             'text' => mrkdwn(
-                (checkIn ? ':large_green_circle:  *Clocked in* at *' : ':red_circle:  *Clocked out* at *') +
+                (checkIn ? ':large_green_circle:  ' : ':red_circle:  ') +
+                '*' + SlackService.escape(employeeName(punch)) + '*' +
+                (checkIn ? ' clocked in at *' : ' clocked out at *') +
                 punchTime(punch) + '*'
             )
         });
@@ -195,6 +211,9 @@ public with sharing class AttendancePunchSlackNotifier implements Queueable, Dat
             'type' => 'context',
             'elements' => new List<Object>{
                 mrkdwn(
+                    (String.isBlank(employeeCode(punch))
+                        ? ''
+                        : SlackService.escape(employeeCode(punch)) + '  |  ') +
                     'Recorded from ' + SlackService.escape(
                         String.isBlank(punch.Source__c) ? 'an unnamed source' : punch.Source__c
                     ) + '  |  `/attendance today` for the full log'
