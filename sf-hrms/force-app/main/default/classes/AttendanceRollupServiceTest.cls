@@ -345,6 +345,152 @@ private class AttendanceRollupServiceTest {
     }
 
     @isTest
+    static void shouldPointEveryPunchAtItsDay() {
+        // The whole reason the relationship exists: punches should hang off the
+        // day they roll into, not sit in a flat pile under the employee.
+        Employee__c employee = firstEmployee();
+        List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 13, 0), 'Check-Out'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 14, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 19, 0), 'Check-Out')
+        };
+
+        // When
+        Test.startTest();
+        insert punches;
+        Test.stopTest();
+
+        // Then
+        Attendance__c day = attendanceFor(employee.Id, WORKDAY);
+        Assert.isNotNull(day, 'The day is derived');
+        List<Attendance_Punch__c> saved = [
+            SELECT Id, Attendance__c FROM Attendance_Punch__c WHERE Id IN :punches
+        ];
+        Assert.areEqual(4, saved.size(), 'All four punches are still their own records');
+        for (Attendance_Punch__c punch : saved) {
+            Assert.areEqual(day.Id, punch.Attendance__c,
+                'Every punch points at the day it rolled into');
+        }
+    }
+
+    @isTest
+    static void shouldSeparatePunchesByDay_WhenTwoDaysArriveTogether() {
+        // A biometric batch can carry several days at once, and each punch must
+        // land on its own day rather than all on the first.
+        Employee__c employee = firstEmployee();
+        Date dayTwo = WORKDAY.addDays(1);
+        List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 19, 0), 'Check-Out'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(dayTwo, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(dayTwo, 19, 0), 'Check-Out')
+        };
+
+        // When
+        Test.startTest();
+        insert punches;
+        Test.stopTest();
+
+        // Then
+        Attendance__c first = attendanceFor(employee.Id, WORKDAY);
+        Attendance__c second = attendanceFor(employee.Id, dayTwo);
+        Assert.areNotEqual(first.Id, second.Id, 'Two distinct days');
+        Map<Id, Attendance_Punch__c> saved = new Map<Id, Attendance_Punch__c>([
+            SELECT Id, Attendance__c, Punch_DateTime__c FROM Attendance_Punch__c WHERE Id IN :punches
+        ]);
+        Assert.areEqual(first.Id, saved.get(punches[0].Id).Attendance__c, 'Day one punch on day one');
+        Assert.areEqual(first.Id, saved.get(punches[1].Id).Attendance__c, 'Day one punch on day one');
+        Assert.areEqual(second.Id, saved.get(punches[2].Id).Attendance__c, 'Day two punch on day two');
+        Assert.areEqual(second.Id, saved.get(punches[3].Id).Attendance__c, 'Day two punch on day two');
+    }
+
+    @isTest
+    static void shouldNotRecurse_WhenStampingParentFiresTheTriggerAgain() {
+        // Stamping the parent updates the punches, which fires the trigger a
+        // second time. Without the guard that would rebuild on every pass; the
+        // limit assertions below are what would blow up if it ever loops.
+        Employee__c employee = firstEmployee();
+        List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 19, 0), 'Check-Out')
+        };
+
+        // When
+        Test.startTest();
+        insert punches;
+        Integer queriesUsed = Limits.getQueries();
+        Integer dmlUsed = Limits.getDmlStatements();
+        Test.stopTest();
+
+        // Then
+        Assert.isTrue(queriesUsed < Limits.getLimitQueries(),
+            'A recursing rollup would exhaust the query limit, used ' + queriesUsed);
+        Assert.isTrue(dmlUsed < Limits.getLimitDmlStatements(),
+            'A recursing rollup would exhaust the DML limit, used ' + dmlUsed);
+        Assert.isFalse(AttendanceRollupService.isRebuilding,
+            'The guard is lowered once the rebuild finishes');
+
+        Attendance__c day = attendanceFor(employee.Id, WORKDAY);
+        Assert.areEqual(9, day.Total_Hours__c, 'And the day is still derived correctly');
+    }
+
+    @isTest
+    static void shouldStampParent_WhenPunchesPredateTheRelationship() {
+        // The backfill case: rows already correct in every other respect, so the
+        // day is not re-upserted and only the parent needs writing.
+        Employee__c employee = firstEmployee();
+        List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 19, 0), 'Check-Out')
+        };
+        insert punches;
+        // Clear the parent to imitate records written before the field existed.
+        for (Attendance_Punch__c punch : punches) {
+            punch.Attendance__c = null;
+        }
+        update punches;
+
+        // When the rollup is replayed over them
+        Test.startTest();
+        AttendanceRollupService.rebuild([
+            SELECT Id, Employee__c, Punch_DateTime__c, Punch_Type__c, Attendance__c
+            FROM Attendance_Punch__c WHERE Employee__c = :employee.Id
+        ]);
+        Test.stopTest();
+
+        // Then
+        Attendance__c day = attendanceFor(employee.Id, WORKDAY);
+        for (Attendance_Punch__c punch : [
+            SELECT Attendance__c FROM Attendance_Punch__c WHERE Id IN :punches
+        ]) {
+            Assert.areEqual(day.Id, punch.Attendance__c, 'The backfill points it at the day');
+        }
+    }
+
+    @isTest
+    static void shouldKeepPunches_WhenTheDayIsDeleted() {
+        // The lookup is deliberately not a master-detail. Deleting the derived
+        // day must never destroy the punches it was derived from.
+        Employee__c employee = firstEmployee();
+        List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(employee, TestDataFactory.istInstant(WORKDAY, 19, 0), 'Check-Out')
+        };
+        insert punches;
+        Attendance__c day = attendanceFor(employee.Id, WORKDAY);
+
+        // When
+        Test.startTest();
+        delete day;
+        Test.stopTest();
+
+        // Then
+        Assert.areEqual(2, [SELECT COUNT() FROM Attendance_Punch__c WHERE Id IN :punches],
+            'The punches survive their day being deleted');
+    }
+
+    @isTest
     static void shouldFormatMinutes_ForEveryShape() {
         Assert.areEqual('0m', AttendanceRollupService.minutesText(0), 'Zero reads as 0m');
         Assert.areEqual('45m', AttendanceRollupService.minutesText(45), 'Under an hour omits the hour');

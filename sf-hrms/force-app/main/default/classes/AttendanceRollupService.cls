@@ -83,14 +83,37 @@ public with sharing class AttendanceRollupService {
     }
 
     /**
+     * True while a rebuild is in flight.
+     *
+     * The rebuild stamps the parent day onto its punches, and that update fires
+     * the punch trigger again. Without this the work would be done twice for
+     * every punch, and any non-convergence would loop until the transaction hit
+     * a governor limit. Re-entry is always our own write, never a user edit,
+     * because a user edit cannot happen while this frame is on the stack.
+     */
+    @TestVisible
+    private static Boolean isRebuilding = false;
+
+    /**
      * Entry point used by AttendancePunchTrigger.
      *
      * @param changedPunches punches from Trigger.new and/or Trigger.old
      */
     public static void rebuild(List<Attendance_Punch__c> changedPunches) {
-        if (changedPunches == null || changedPunches.isEmpty()) {
+        if (changedPunches == null || changedPunches.isEmpty() || isRebuilding) {
             return;
         }
+        isRebuilding = true;
+        try {
+            rebuildDays(changedPunches);
+        } finally {
+            // Cleared even on failure, so one bad transaction cannot leave the
+            // guard raised and silently disable the rollup for the rest of it.
+            isRebuilding = false;
+        }
+    }
+
+    private static void rebuildDays(List<Attendance_Punch__c> changedPunches) {
 
         Set<Id> employeeIds = new Set<Id>();
         Set<Date> businessDates = new Set<Date>();
@@ -123,7 +146,7 @@ public with sharing class AttendanceRollupService {
 
         Map<String, DayTotals> totalsByKey = new Map<String, DayTotals>();
         for (Attendance_Punch__c punch : [
-            SELECT Id, Employee__c, Punch_DateTime__c, Punch_Type__c
+            SELECT Id, Employee__c, Punch_DateTime__c, Punch_Type__c, Attendance__c
             FROM Attendance_Punch__c
             WHERE Employee__c IN :employeeIds
               AND Punch_DateTime__c >= :rangeStart
@@ -184,6 +207,10 @@ public with sharing class AttendanceRollupService {
 
         List<Attendance__c> toUpsert = new List<Attendance__c>();
         List<Attendance__c> toDelete = new List<Attendance__c>();
+        // Every day with punches, changed or not. An unchanged day is not
+        // upserted but its punches may still need pointing at it, which is the
+        // case on a backfill of records that predate the relationship.
+        Map<String, Attendance__c> rowByKey = new Map<String, Attendance__c>();
 
         for (String key : totalsByKey.keySet()) {
             DayTotals totals = totalsByKey.get(key);
@@ -217,6 +244,7 @@ public with sharing class AttendanceRollupService {
             row.Penalty__c = penaltyReason != null;
             row.Penalty_Reason__c = penaltyReason;
 
+            rowByKey.put(key, row);
             if (existing == null || isChanged(existing, row)) {
                 toUpsert.add(row);
             }
@@ -227,6 +255,46 @@ public with sharing class AttendanceRollupService {
         }
         if (!toDelete.isEmpty()) {
             delete toDelete;
+        }
+
+        stampParentOntoPunches(totalsByKey, rowByKey);
+    }
+
+    /**
+     * Points each punch at the day it rolled up into.
+     *
+     * Runs after the upsert, because a day created in this transaction has no id
+     * before it. Only punches whose parent is actually wrong are written, so a
+     * rebuild that changes nothing performs no DML and the re-entrant trigger it
+     * would otherwise fire never happens.
+     */
+    private static void stampParentOntoPunches(
+        Map<String, DayTotals> totalsByKey,
+        Map<String, Attendance__c> rowByKey
+    ) {
+        List<Attendance_Punch__c> toReparent = new List<Attendance_Punch__c>();
+
+        for (String key : rowByKey.keySet()) {
+            Attendance__c day = rowByKey.get(key);
+            if (day == null || day.Id == null) {
+                continue;
+            }
+            DayTotals totals = totalsByKey.get(key);
+            if (totals == null) {
+                continue;
+            }
+            for (Attendance_Punch__c punch : totals.punches) {
+                if (punch.Attendance__c != day.Id) {
+                    toReparent.add(new Attendance_Punch__c(
+                        Id = punch.Id,
+                        Attendance__c = day.Id
+                    ));
+                }
+            }
+        }
+
+        if (!toReparent.isEmpty()) {
+            update toReparent;
         }
     }
 
@@ -406,6 +474,8 @@ public with sharing class AttendanceRollupService {
         /** Set when the last punch seen was a check-in and work is in progress. */
         private DateTime openWorkStart;
         private DateTime lastPunch;
+        /** Every punch behind this day, so each can be pointed at it. */
+        private List<Attendance_Punch__c> punches = new List<Attendance_Punch__c>();
         private Integer accumulatedBreakSeconds = 0;
         private Integer accumulatedWorkSeconds = 0;
 
@@ -415,6 +485,7 @@ public with sharing class AttendanceRollupService {
         }
 
         private void apply(Attendance_Punch__c punch) {
+            punches.add(punch);
             DateTime stamp = punch.Punch_DateTime__c;
             if (lastPunch == null || stamp > lastPunch) {
                 lastPunch = stamp;

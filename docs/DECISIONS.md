@@ -5,6 +5,63 @@ question without knowing why it was settled.
 
 ---
 
+## 2026-09-08 — Punches stay one record each, parented to the day
+
+Raised as: a single employee generating ten punch records in one day makes no
+sense, and the punches should live inside the attendance record instead.
+
+**Kept: one record per punch. Added: a lookup to the day it rolls into.**
+
+The record count is a direct consequence of break tracking. Break time is
+derived from the gaps between punches, so someone taking four short breaks *is*
+ten events, and those ten records are the input to the calculation rather than
+noise around it. The complaint was really about presentation: the Attendance
+Punch tab showed an undifferentiated pile with no parent. A relationship fixes
+that; restructuring the data would have paid for it in the wrong currency.
+
+Collapsing punches into the day record was costed and rejected. It would have
+broken seven things:
+
+- **Concurrent writes would silently lose punches.** A web clock-out arriving
+  while a biometric batch imports: both read the day, both append, last write
+  wins, one punch disappears with no error.
+- **Biometric deduplication becomes impossible.** External_Punch_ID__c is a
+  unique external id, and uniqueness cannot be enforced on a value inside a JSON
+  blob. Replayed device buffers would invent break time nobody took.
+- **The self-correcting rollup dies.** Penalties clear themselves because the day
+  is recomputed from the punches. Put the punches inside the day and the source
+  and the derived value become the same record.
+- Per-punch audit (Adjusted_By__c, Adjustment_Reason__c, Approved__c) loses its
+  meaning, the Slack punch notice has no insert to fire on, reporting by source
+  or device becomes impossible, and a long text area caps out at 32,768
+  characters.
+
+**Lookup, not master-detail.** Master-detail cascade-deletes children, and the
+rollup deletes Attendance rows when a day empties. That would have destroyed the
+punches the day was derived from. Master-detail also demands the parent at
+insert time, and the day does not exist until after the punch is written.
+
+**The recursion hazard this created.** Stamping the parent updates the punches,
+which re-fires AttendancePunchTrigger. A static guard on AttendanceRollupService
+short-circuits the re-entry, and only punches whose parent is actually wrong are
+written, so a rebuild that changes nothing performs no DML at all.
+
+### The scaling question underneath it
+
+Measured while costing this: the Developer Edition org has **5 MB of data
+storage, 2 MB used**, roughly 1,536 records of headroom. One month of attendance
+for 28 people at four punches a day is 3,080 records, so the org fills in about
+two weeks. One row per day with no punch records at all only reaches 2.5 months.
+
+The schema was never the scaling constraint; the platform was. Confirmed with
+the business that Developer Edition is for building and testing only, and the
+system moves to an Enterprise Edition org before go-live, where storage is a
+non-issue. **No retention or archival job was built**, on that basis. If the move
+slips, a purge of punches older than 90 days keeping a frozen snapshot on the
+day is the mitigation, and it is roughly a day of work.
+
+---
+
 ## 2026-09-07 — No onboarding LWC in Salesforce
 
 **Decided: the portal keeps the employee onboarding form. No Lightning Web

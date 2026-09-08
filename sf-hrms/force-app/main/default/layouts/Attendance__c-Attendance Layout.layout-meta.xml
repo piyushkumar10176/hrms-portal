@@ -63,6 +63,15 @@
         <style>TwoColumnsLeftToRight</style>
     </layoutSections>
     <relatedLists>
+        <fields>Punch_Type__c</fields>
+        <fields>Punch_DateTime__c</fields>
+        <fields>Source__c</fields>
+        <fields>Device_ID__c</fields>
+        <relatedList>Attendance_Punch__c.Attendance__c</relatedList>
+        <sortField>Punch_DateTime__c</sortField>
+        <sortOrder>Asc</sortOrder>
+    </relatedLists>
+    <relatedLists>
         <relatedList>RelatedHistoryList</relatedList>
     </relatedLists>
     <showEmailCheckbox>false</showEmailCheckbox>
