@@ -14,8 +14,8 @@
       {
         "command": "/myleave",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
-        "description": "Your leave balance, apply for leave, or check status",
-        "usage_hint": "balance | apply | status",
+        "description": "Your leave balance",
+        "usage_hint": "balance",
         "should_escape": false
       },
       {
@@ -29,28 +29,24 @@
         "command": "/approvals",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Requests waiting on your decision",
-        "usage_hint": "",
         "should_escape": false
       },
       {
         "command": "/whosout",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Who is on leave today",
-        "usage_hint": "",
         "should_escape": false
       },
       {
         "command": "/regularize",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
-        "description": "Regularize a penalised attendance day",
-        "usage_hint": "",
+        "description": "Your regularization allowance and flagged days",
         "should_escape": false
       },
       {
         "command": "/hrdash",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
-        "description": "HR dashboard: who is out, leave counts, penalties",
-        "usage_hint": "",
+        "description": "HR dashboard: headcount, leave and attendance",
         "should_escape": false
       }
     ],
