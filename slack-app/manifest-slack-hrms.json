@@ -13,42 +13,42 @@
     "slash_commands": [
       {
         "command": "/myleave",
-        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Your leave balance, apply for leave, or check status",
         "usage_hint": "balance | apply | status",
         "should_escape": false
       },
       {
         "command": "/attendance",
-        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Clock in, clock out, or today's punches",
         "usage_hint": "in | out | today",
         "should_escape": false
       },
       {
         "command": "/approvals",
-        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Requests waiting on your decision",
         "usage_hint": "",
         "should_escape": false
       },
       {
         "command": "/whosout",
-        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Who is on leave today",
         "usage_hint": "",
         "should_escape": false
       },
       {
         "command": "/regularize",
-        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Regularize a penalised attendance day",
         "usage_hint": "",
         "should_escape": false
       },
       {
         "command": "/hrdash",
-        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "HR dashboard: who is out, leave counts, penalties",
         "usage_hint": "",
         "should_escape": false
@@ -74,7 +74,7 @@
   },
   "settings": {
     "event_subscriptions": {
-      "request_url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/events",
+      "request_url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/events",
       "bot_events": [
         "app_home_opened",
         "team_join"
@@ -82,7 +82,7 @@
     },
     "interactivity": {
       "is_enabled": true,
-      "request_url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/interactivity"
+      "request_url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/interactivity"
     },
     "org_deploy_enabled": true,
     "socket_mode_enabled": false,
