@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Gateway_Enabled__c</fullName>
+    <label>Gateway Enabled</label>
+    <description>Master switch for the Apex Slack gateway. Off means every inbound request is refused, which is how the endpoint stays inert until it is deliberately turned on.</description>
+    <type>Checkbox</type>
+    <defaultValue>false</defaultValue>
+</CustomField>
