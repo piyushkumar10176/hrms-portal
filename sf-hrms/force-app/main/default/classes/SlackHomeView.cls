@@ -39,7 +39,7 @@ public inherited sharing class SlackHomeView {
     /** Shown to a Slack account with no matching employee record. */
     public static List<Object> buildUnlinked() {
         return new List<Object>{
-            SlackBlocks.header('CloudSheer HRMS'),
+            SlackBlocks.header('HRMS'),
             SlackBlocks.section(
                 'Your Slack account is not linked to an employee record yet, so there is ' +
                 'nothing to show here.'
@@ -107,7 +107,13 @@ public inherited sharing class SlackHomeView {
         ];
 
         if (balances.isEmpty()) {
-            blocks.add(SlackBlocks.context('_No leave types are allocated to you yet._'));
+            // Still offered: unpaid and newly configured types legitimately carry
+            // no balance row, so an empty list is not the same as no entitlement.
+            blocks.add(SlackBlocks.context('_No leave balance is allocated to you yet._'));
+            blocks.add(SlackBlocks.actions(new List<Object>{
+                SlackBlocks.button('Apply for leave', 'hrms_apply_leave', 'new', 'primary'),
+                SlackBlocks.button('My requests', 'home_my_requests', 'mine', null)
+            }));
             return blocks;
         }
 
@@ -120,9 +126,10 @@ public inherited sharing class SlackHomeView {
                 (left == 1 ? ' day left' : ' days left'));
         }
         blocks.add(SlackBlocks.fields(labels, values));
-        blocks.add(SlackBlocks.context(
-            'Use `/hrms-leave` for the full picture. Applying from here arrives with the next release.'
-        ));
+        blocks.add(SlackBlocks.actions(new List<Object>{
+            SlackBlocks.button('Apply for leave', 'hrms_apply_leave', 'new', 'primary'),
+            SlackBlocks.button('My requests', 'home_my_requests', 'mine', null)
+        }));
         return blocks;
     }
 
@@ -247,6 +254,18 @@ public inherited sharing class SlackHomeView {
                 ' nothing, having no Slack account linked.'
             ));
         }
+
+        // HR reads; only an administrator may create or change. The buttons an
+        // action cannot honour are left off rather than rendered and refused.
+        List<Object> buttons = new List<Object>{
+            SlackBlocks.button('Find an employee', 'hrms_find_employee', 'find', null),
+            SlackBlocks.button('Attendance', 'hrms_pick_attendance', 'pick', null),
+            SlackBlocks.button('Everyone today', 'hrms_today_attendance', 'today', null)
+        };
+        if (SlackAuthz.canManageEmployees(employee)) {
+            buttons.add(SlackBlocks.button('Add an employee', 'hrms_add_employee', 'add', 'primary'));
+        }
+        blocks.add(SlackBlocks.actions(buttons));
         return blocks;
     }
 
@@ -272,15 +291,18 @@ public inherited sharing class SlackHomeView {
         return System.now().format('EEEE d MMMM', AttendanceRollupService.businessTimeZoneName());
     }
 
+    /**
+     * Delegated so there is one definition of "today's punches".
+     *
+     * This used to filter on DAY_ONLY(convertTimezone(...)), which converts into
+     * the running user's zone. The guest user this executes as is on GMT and the
+     * office is Asia/Kolkata, so an early morning punch read as yesterday's and
+     * the tab showed an empty day to somebody already at their desk.
+     */
     private static List<Attendance_Punch__c> todaysPunches(Id employeeId) {
-        Date today = AttendanceRollupService.businessDateOf(System.now());
-        return [
-            SELECT Punch_DateTime__c, Punch_Type__c, Source__c
-            FROM Attendance_Punch__c
-            WHERE Employee__c = :employeeId
-              AND DAY_ONLY(convertTimezone(Punch_DateTime__c)) = :today
-            ORDER BY Punch_DateTime__c ASC LIMIT 50
-        ];
+        return SlackAdminData.punchesOn(
+            employeeId, AttendanceRollupService.businessDateOf(System.now())
+        );
     }
 
     private static Attendance__c derivedDay(Id employeeId) {

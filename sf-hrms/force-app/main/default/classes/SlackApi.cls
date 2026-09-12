@@ -89,6 +89,52 @@ public inherited sharing class SlackApi {
         });
     }
 
+    /**
+     * Finds the Slack member id behind a work email.
+     *
+     * This is what replaces the portal's emailed invitation: in a Slack-only
+     * product, onboarding somebody means connecting their record to the account
+     * they already have, not mailing them a password link.
+     *
+     * Sent as a GET with the address in the query string, because this is one of
+     * the few Slack methods that refuses a JSON body. Needs users:read.email.
+     *
+     * @return the member id, or null when Slack has nobody with that address
+     */
+    public static String lookupUserIdByEmail(String email) {
+        String token = botToken();
+        if (String.isBlank(token) || String.isBlank(email)) {
+            return null;
+        }
+
+        HttpRequest request = new HttpRequest();
+        request.setEndpoint(
+            BASE + 'users.lookupByEmail?email=' + EncodingUtil.urlEncode(email.trim(), 'UTF-8')
+        );
+        request.setMethod('GET');
+        request.setHeader('Authorization', 'Bearer ' + token);
+        request.setTimeout(TIMEOUT_MS);
+
+        try {
+            HttpResponse response = new Http().send(request);
+            if (response.getStatusCode() != 200) {
+                return null;
+            }
+            Map<String, Object> body =
+                (Map<String, Object>) JSON.deserializeUntyped(response.getBody());
+            if (body.get('ok') != true) {
+                // users_not_found is the ordinary answer for somebody who has not
+                // joined the workspace yet, so it is not logged as a failure.
+                return null;
+            }
+            Map<String, Object> user = (Map<String, Object>) body.get('user');
+            return user == null ? null : String.valueOf(user.get('id'));
+        } catch (Exception e) {
+            System.debug(LoggingLevel.ERROR, 'users.lookupByEmail failed: ' + e.getMessage());
+            return null;
+        }
+    }
+
     /** Posts a message. A member id as the channel opens a direct message. */
     public static Result postMessage(String channel, String text, List<Object> blocks) {
         Map<String, Object> payload = new Map<String, Object>{
