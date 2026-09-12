@@ -1,0 +1,6 @@
+/* A long roster should scroll inside the card rather than pushing the page. */
+.grid-scroll {
+    max-height: 32rem;
+    overflow-y: auto;
+    overflow-x: auto;
+}

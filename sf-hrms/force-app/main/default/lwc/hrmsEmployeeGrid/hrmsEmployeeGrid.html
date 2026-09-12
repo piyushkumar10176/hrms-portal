@@ -1,0 +1,73 @@
+<template>
+    <lightning-card title="Employees" icon-name="standard:people">
+        <div slot="actions" class="slds-button-group">
+            <lightning-button label={gapsLabel} onclick={toggleGaps}></lightning-button>
+            <lightning-button label={inactiveLabel} onclick={toggleInactive}></lightning-button>
+        </div>
+
+        <div class="slds-var-p-horizontal_medium">
+            <template lwc:if={error}>
+                <div class="slds-box slds-theme_error slds-var-m-bottom_small" role="alert">
+                    {error}
+                </div>
+            </template>
+
+            <template lwc:if={hasGaps}>
+                <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
+                    <strong>{gapCount}</strong> of {rowCount} people have something missing.
+                    Somebody with no manager has nobody to approve their leave, and somebody
+                    with no Slack account linked receives no notifications at all.
+                </div>
+            </template>
+
+            <!-- The bulk bar. Select rows, choose what to set, apply once. -->
+            <div class="slds-box slds-var-m-bottom_small">
+                <div class="slds-grid slds-wrap slds-gutters_x-small">
+                    <div class="slds-col slds-size_1-of-5">
+                        <lightning-combobox label="Department" value={departmentChoice}
+                            options={departmentOptions} onchange={handleDepartment}
+                            placeholder="Leave unchanged"></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-5">
+                        <lightning-combobox label="Designation" value={designationChoice}
+                            options={designationOptions} onchange={handleDesignation}
+                            placeholder="Leave unchanged"></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-5">
+                        <lightning-combobox label="Reports to" value={managerChoice}
+                            options={managerOptions} onchange={handleManager}
+                            placeholder="Leave unchanged"></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-5">
+                        <lightning-combobox label="Access level" value={roleChoice}
+                            options={roleOptions} onchange={handleRole}
+                            placeholder="Leave unchanged"></lightning-combobox>
+                    </div>
+                    <div class="slds-col slds-size_1-of-5 slds-align-bottom">
+                        <lightning-button variant="brand" label={applyLabel}
+                            disabled={applyDisabled} onclick={handleApply}
+                            class="slds-var-m-right_x-small"></lightning-button>
+                        <lightning-button label="Clear" onclick={clearChoices}></lightning-button>
+                    </div>
+                </div>
+                <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
+                    A field left blank is left alone, never cleared.
+                </p>
+            </div>
+
+            <div class="grid-scroll">
+                <lightning-datatable
+                    key-field="recordId"
+                    data={rows}
+                    columns={columns}
+                    onrowselection={handleRowSelection}
+                    column-widths-mode="auto">
+                </lightning-datatable>
+            </div>
+
+            <template lwc:if={saving}>
+                <lightning-spinner alternative-text="Saving" size="small"></lightning-spinner>
+            </template>
+        </div>
+    </lightning-card>
+</template>
