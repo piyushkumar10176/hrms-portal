@@ -1,120 +1,72 @@
 /**
- * Approving and rejecting from a Slack button.
+ * Announces a leave decision that has already been recorded.
  *
- * The decision runs here rather than in the request that carried the click,
- * because Apex cannot call out after DML in the same transaction and the
- * message has to be rewritten once the record has changed. Slack is
- * acknowledged first, then the work happens, then the message is replaced.
+ * This used to record the decision as well, and that was the bug. Apex cannot
+ * call out once DML has run in the same transaction, so the update succeeded and
+ * the message rewrite threw a CalloutException that this class's own catch
+ * swallowed. The approver saw a button that did nothing, pressed it again, and
+ * the second press reported the decision already made. The deciding now happens
+ * in the request that carried the click, and only the talking happens here.
  *
- * Who may decide is re-checked here, never inferred from the button. A button's
- * action and value come from the client, so they are a convenience and never the
- * authorisation boundary.
+ * Three people need to know, and each by a different route: the approver's
+ * message is rewritten in place so the buttons disappear and the same request
+ * cannot be decided twice from a message somebody still has open; the person who
+ * asked is sent a direct message, because a message written earlier cannot
+ * change itself and their own list still reads "Submitted"; and both Home tabs
+ * are redrawn, since the balances and the waiting-on-you count have moved.
  */
 /**
  * SHARING NOTE
  *
  * This runs as the Salesforce Site guest user, which has no identity of its own.
  * Salesforce forces guest users to private record access whatever the org-wide
- * default says, so "with sharing" here means seeing nothing at all, and the Home
- * tab renders as if nobody is linked.
+ * default says, so "with sharing" here means seeing nothing at all.
  *
- * Identity comes from the signed Slack payload, and every authorisation decision
- * is made explicitly against the employee it names. Record sharing for the guest
- * is therefore meaningless rather than protective.
+ * Identity comes from the signed Slack payload, and the authorisation decision
+ * was made explicitly against the employee it named before this was enqueued.
  */
 public without sharing class SlackDecisionWorker implements Queueable, Database.AllowsCallouts {
 
-    private final Id requestId;
-    private final Boolean approving;
-    private final String slackUserId;
+    private final String approverText;
+    private final String requesterText;
+    private final String requesterSlackId;
+    private final String approverSlackId;
     private final String responseUrl;
 
-    public SlackDecisionWorker(Id requestId, Boolean approving, String slackUserId, String responseUrl) {
-        this.requestId = requestId;
-        this.approving = approving;
-        this.slackUserId = slackUserId;
+    public SlackDecisionWorker(
+        SlackLeaveDecision.Announcement announcement, String approverSlackId, String responseUrl
+    ) {
+        this.approverText = announcement.toApprover;
+        this.requesterText = announcement.toRequester;
+        this.requesterSlackId = announcement.requesterSlackId;
+        this.approverSlackId = approverSlackId;
         this.responseUrl = responseUrl;
     }
 
     public void execute(QueueableContext context) {
         try {
-            Employee__c actor = SlackEmployeeLookup.forSlackUser(slackUserId);
-            if (actor == null) {
-                replace(':no_entry: Your Slack account is not linked to an employee record.');
-                return;
-            }
-            replace(decide(actor));
+            tellApprover();
+            tellRequester();
+            redrawTabs();
         } catch (Exception e) {
             System.debug(LoggingLevel.ERROR,
-                'Slack decision failed: ' + e.getTypeName() + ': ' + e.getMessage());
-            replace(':warning: Something went wrong recording that decision. Nothing was changed.');
+                'Announcing a leave decision failed: ' + e.getTypeName() + ': ' + e.getMessage());
         }
     }
 
     /**
-     * Records the decision, or explains why it cannot be made.
+     * Rewrites the message the button was on.
      *
-     * @return the text that replaces the original message
+     * replace_original removes the buttons with it. A Home tab press carries no
+     * response_url, that channel existing only for messages, so there the
+     * outcome is sent directly instead of being dropped.
      */
-    private String decide(Employee__c actor) {
-        List<Leave_Request__c> found = [
-            SELECT Id, Name, Status__c, Employee__c, Employee__r.Name, Approver__c,
-                   Leave_Type__r.Name, From_Date__c, To_Date__c, Days__c
-            FROM Leave_Request__c
-            WHERE Id = :requestId
-            LIMIT 1
-        ];
-        if (found.isEmpty()) {
-            return ':grey_question: That request no longer exists.';
+    private void tellApprover() {
+        if (String.isBlank(approverText)) {
+            return;
         }
-        Leave_Request__c request = found[0];
-
-        // Already decided. Two people pressing at once is the normal case here,
-        // not an edge case, because the request is visible to both the manager
-        // and everyone in the HR channel.
-        if (request.Status__c != 'Submitted') {
-            return ':information_source: Already *' + request.Status__c.toLowerCase() +
-                   '*. Nothing was changed.';
-        }
-
-        // The one rule with no exception, including for HR and administrators.
-        if (request.Employee__c == actor.Id) {
-            return ':no_entry: You cannot decide your own request.';
-        }
-
-        Boolean isApprover = request.Approver__c == actor.Id;
-        Boolean isOverride = !isApprover && SlackEmployeeLookup.isHrOrAdmin(actor);
-        if (!isApprover && !isOverride) {
-            return ':no_entry: You are not the approver for that request.';
-        }
-
-        request.Status__c = approving ? 'Approved' : 'Rejected';
-        // The trigger recalculates the balance and notifies the employee, so
-        // nothing of that belongs here.
-        update request;
-
-        String who = SlackBlocks.escape(
-            request.Employee__r == null ? 'the employee' : request.Employee__r.Name
-        );
-        String decision = approving ? ':white_check_mark: *Approved*' : ':x: *Rejected*';
-        String leaveType = request.Leave_Type__r == null ? 'leave' : request.Leave_Type__r.Name;
-
-        return decision + '  ·  ' + who + '\n' +
-               leaveType + ', ' + SlackBlocks.dateText(request.From_Date__c) +
-               ' to ' + SlackBlocks.dateText(request.To_Date__c) +
-               '  ·  ' + request.Days__c + ' day' + (request.Days__c == 1 ? '' : 's') +
-               '\n_Decided by ' + SlackBlocks.escape(actor.Name) +
-               (isOverride ? ' on behalf of the approver' : '') + '._';
-    }
-
-    /**
-     * Rewrites the original message.
-     *
-     * replace_original removes the buttons along with it, so the same request
-     * cannot be decided twice from a message somebody still has open.
-     */
-    private void replace(String text) {
         if (String.isBlank(responseUrl)) {
+            SlackApi.postMessage(approverSlackId, approverText, null);
             return;
         }
         HttpRequest request = new HttpRequest();
@@ -125,8 +77,8 @@ public without sharing class SlackDecisionWorker implements Queueable, Database.
         request.setBody(JSON.serialize(new Map<String, Object>{
             'replace_original' => true,
             'response_type' => 'ephemeral',
-            'text' => text,
-            'blocks' => new List<Object>{ SlackBlocks.section(text) }
+            'text' => approverText,
+            'blocks' => new List<Object>{ SlackBlocks.section(approverText) }
         }));
         try {
             HttpResponse response = new Http().send(request);
@@ -136,6 +88,23 @@ public without sharing class SlackDecisionWorker implements Queueable, Database.
             }
         } catch (Exception e) {
             System.debug(LoggingLevel.ERROR, 'response_url unreachable: ' + e.getMessage());
+        }
+    }
+
+    private void tellRequester() {
+        if (String.isBlank(requesterText) || String.isBlank(requesterSlackId)) {
+            return;
+        }
+        SlackApi.postMessage(requesterSlackId, requesterText, null);
+    }
+
+    /** Both tabs are now out of date: one lost a decision, one gained a balance. */
+    private void redrawTabs() {
+        if (String.isNotBlank(requesterSlackId)) {
+            SlackEventWorker.refreshHome(requesterSlackId);
+        }
+        if (String.isNotBlank(approverSlackId) && approverSlackId != requesterSlackId) {
+            SlackEventWorker.refreshHome(approverSlackId);
         }
     }
 }

@@ -256,62 +256,157 @@ private class SlackGatewayRestTest {
 
     @isTest
     static void shouldApproveFromAButton() {
-        Employee__c approver = [SELECT Id, Name FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'];
-        Employee__c asker = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1];
+        Employee__c approver = [
+            SELECT Id, Name, Role__c FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'
+        ];
+        Employee__c asker = [
+            SELECT Id, Slack_User_Id__c FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1
+        ];
+        asker.Slack_User_Id__c = 'U0ASKER001';
+        update asker;
         Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
-        Leave_Request__c request = TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Submitted');
+        Leave_Request__c request =
+            TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Submitted');
         insert request;
-        Test.setMock(HttpCalloutMock.class, new ResponseUrlMock());
 
         Test.startTest();
-        System.enqueueJob(new SlackDecisionWorker(request.Id, true, 'U0TEST0001', 'https://example.test/hook'));
+        SlackLeaveDecision.Announcement said =
+            SlackLeaveDecision.decide(request.Id, true, approver);
         Test.stopTest();
 
         Assert.areEqual('Approved',
             [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
             'The named approver can approve');
-        // At least one: the worker replaces the message, and approving also fires
-        // LeaveRequestTrigger, which notifies the employee through the same mock.
-        Assert.isTrue(responseUrlCalls >= 1,
-            'The original message is replaced, was ' + responseUrlCalls + ' call(s)');
+        Assert.isTrue(said.changedAnything, 'And the decision counts as a change');
+        Assert.isTrue(said.toApprover.contains('Approved'),
+            'The approver\'s message says what was decided: ' + said.toApprover);
+        // The reason this class exists: their own list still reads "Submitted"
+        // with a cancel button, and a sent message cannot change itself.
+        Assert.isNotNull(said.toRequester, 'The person who asked has to be told');
+        Assert.areEqual('U0ASKER001', said.requesterSlackId, 'And told at their own account');
+        Assert.isTrue(said.toRequester.contains('approved'),
+            'In words they can act on: ' + said.toRequester);
+    }
+
+    @isTest
+    static void shouldTellTheRequesterWhenTheirLeaveIsRejected() {
+        Employee__c approver = [
+            SELECT Id, Name, Role__c FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'
+        ];
+        Employee__c asker = [
+            SELECT Id, Slack_User_Id__c FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1
+        ];
+        asker.Slack_User_Id__c = 'U0ASKER001';
+        update asker;
+        Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
+        Leave_Request__c request =
+            TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Submitted');
+        insert request;
+
+        Test.startTest();
+        SlackLeaveDecision.Announcement said =
+            SlackLeaveDecision.decide(request.Id, false, approver);
+        Test.stopTest();
+
+        Assert.areEqual('Rejected',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'A rejection is recorded like any other decision');
+        Assert.isTrue(said.toRequester.contains('rejected'),
+            'A rejection is the case where being told matters most: ' + said.toRequester);
     }
 
     @isTest
     static void shouldRefuseDecidingYourOwnRequest() {
         // The one rule with no exception, including for HR and administrators.
-        Employee__c self = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'];
+        Employee__c self = [
+            SELECT Id, Name, Role__c FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'
+        ];
         Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
-        Leave_Request__c request = TestDataFactory.buildLeaveRequest(self, self, leaveType, 1, 'Submitted');
+        Leave_Request__c request =
+            TestDataFactory.buildLeaveRequest(self, self, leaveType, 1, 'Submitted');
         insert request;
-        Test.setMock(HttpCalloutMock.class, new ResponseUrlMock());
 
         Test.startTest();
-        System.enqueueJob(new SlackDecisionWorker(request.Id, true, 'U0TEST0001', 'https://example.test/hook'));
+        SlackLeaveDecision.Announcement said = SlackLeaveDecision.decide(request.Id, true, self);
         Test.stopTest();
 
         Assert.areEqual('Submitted',
             [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
             'Somebody cannot approve their own request even as an admin');
+        Assert.isFalse(said.changedAnything, 'And nothing is announced as decided');
+        Assert.isNull(said.toRequester, 'Least of all to themselves');
+    }
+
+    @isTest
+    static void shouldRefuseDecidingSomethingYouAreNotTheApproverFor() {
+        Employee__c outsider = [
+            SELECT Id, Name, Role__c FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'
+        ];
+        outsider.Role__c = 'Employee';
+        update outsider;
+        Employee__c asker = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1];
+        Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
+        Leave_Request__c request =
+            TestDataFactory.buildLeaveRequest(asker, null, leaveType, 1, 'Submitted');
+        insert request;
+
+        Test.startTest();
+        SlackLeaveDecision.Announcement said =
+            SlackLeaveDecision.decide(request.Id, true, outsider);
+        Test.stopTest();
+
+        Assert.areEqual('Submitted',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'A button value comes from the client, so the approver is checked here');
+        Assert.isTrue(said.toApprover.contains('not the approver'),
+            'And they are told why: ' + said.toApprover);
     }
 
     @isTest
     static void shouldNotDecideTwice() {
         // Two people pressing at once is normal here, not an edge case: the
         // request is visible to the manager and to everyone in the HR channel.
-        Employee__c approver = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'];
+        Employee__c approver = [
+            SELECT Id, Name, Role__c FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'
+        ];
         Employee__c asker = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1];
         Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
-        Leave_Request__c request = TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Approved');
+        Leave_Request__c request =
+            TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Approved');
         insert request;
-        Test.setMock(HttpCalloutMock.class, new ResponseUrlMock());
 
         Test.startTest();
-        System.enqueueJob(new SlackDecisionWorker(request.Id, false, 'U0TEST0001', 'https://example.test/hook'));
+        SlackLeaveDecision.Announcement said =
+            SlackLeaveDecision.decide(request.Id, false, approver);
         Test.stopTest();
 
         Assert.areEqual('Approved',
             [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
             'An already decided request is not flipped by a second press');
+        Assert.isTrue(said.toApprover.contains('Already'),
+            'And the second press says so plainly: ' + said.toApprover);
+    }
+
+    @isTest
+    static void shouldSayNothingRemainsWhenTheRequestHasGone() {
+        Employee__c approver = [
+            SELECT Id, Name, Role__c FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'
+        ];
+        Employee__c asker = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1];
+        Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
+        Leave_Request__c request =
+            TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Submitted');
+        insert request;
+        Id goneId = request.Id;
+        delete request;
+
+        Test.startTest();
+        SlackLeaveDecision.Announcement said = SlackLeaveDecision.decide(goneId, true, approver);
+        Test.stopTest();
+
+        Assert.isFalse(said.changedAnything, 'There is nothing left to decide');
+        Assert.isTrue(said.toApprover.contains('no longer exists'),
+            'A stale button should explain itself: ' + said.toApprover);
     }
 
     @isTest

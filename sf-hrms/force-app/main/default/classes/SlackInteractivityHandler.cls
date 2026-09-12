@@ -80,17 +80,21 @@ public inherited sharing class SlackInteractivityHandler {
             return;
         }
 
-        // Decisions keep their own worker: they have a message to rewrite in
-        // place, which nothing else here does.
+        // Decisions are recorded here rather than in the worker. A worker that
+        // both wrote and announced could not do the second: Apex forbids a
+        // callout after DML, so the message never changed and the button looked
+        // broken. The worker that follows only talks.
         if (actionId == 'approve_leave' || actionId == 'reject_leave') {
             Id requestId = SlackModalValues.asId(value, Leave_Request__c.SObjectType);
             if (requestId == null) {
                 reply(response, 200, SlackBlocks.ephemeral('That request could not be identified.'));
                 return;
             }
-            System.enqueueJob(new SlackDecisionWorker(
-                requestId, actionId == 'approve_leave', slackUserId, responseUrl
-            ));
+            SlackLeaveDecision.Announcement announcement =
+                SlackLeaveDecision.decide(requestId, actionId == 'approve_leave', actor);
+            System.enqueueJob(
+                new SlackDecisionWorker(announcement, slackUserId, responseUrl)
+            );
             reply(response, 200, '');
             return;
         }
@@ -244,9 +248,10 @@ public inherited sharing class SlackInteractivityHandler {
             if (!outcome.ok) {
                 return refusal(outcome, slackUserId);
             }
-            // The trigger notifies the approver, so this says only what the
-            // person who filled the form needs to hear.
-            enqueue(SlackInteractionWorker.MY_REQUESTS, null, slackUserId,
+            // Only the confirmation. Listing every past request afterwards
+            // buries the one thing they wanted to know under a history they did
+            // not ask for; `/hrms-leave` is there for when they do.
+            enqueue(SlackInteractionWorker.SAY, null, slackUserId,
                 ':white_check_mark: Leave requested. Your approver has been notified.', true);
             return SlackViewBuilder.CLOSE;
         }

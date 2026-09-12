@@ -502,6 +502,137 @@ private class SlackInteractionFlowTest {
         );
     }
 
+    // ---- deciding --------------------------------------------------------
+
+    @isTest
+    static void shouldApproveOnTheFirstPressAndTellBothPeople() {
+        SlackHttpMock mock = mockSlack();
+        prepareResponse();
+        Leave_Request__c request = new Leave_Request__c(
+            Employee__c = staffMember().Id,
+            Approver__c = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = :ADMIN_SLACK_ID].Id,
+            Leave_Type__c = [SELECT Id FROM Leave_Type__c LIMIT 1].Id,
+            From_Date__c = nextMonday(),
+            To_Date__c = nextMonday(),
+            Days__c = 1,
+            Status__c = 'Submitted'
+        );
+        insert request;
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(RestContext.response, JSON.serialize(
+            new Map<String, Object>{
+                'type' => 'block_actions',
+                'user' => new Map<String, Object>{ 'id' => ADMIN_SLACK_ID },
+                'response_url' => 'https://hooks.slack.test/replace',
+                'actions' => new List<Object>{
+                    new Map<String, Object>{
+                        'action_id' => 'approve_leave', 'value' => request.Id
+                    }
+                }
+            }
+        ));
+        // The decision is written in the request that carried the click, so a
+        // second press finds it already made rather than appearing to do nothing.
+        Assert.areEqual('Approved',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'One press is enough');
+        Test.stopTest();
+
+        Assert.isTrue(
+            mock.saidInAny('hooks.slack.test', 'replace_original'),
+            'The buttons have to disappear, or the same request is decided twice: ' +
+                String.join(mock.endpoints, ', ')
+        );
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', 'approved'),
+            'And the person who asked is told: ' + mock.allSaidTo('chat.postMessage')
+        );
+        Assert.isTrue(
+            mock.called('views.publish'),
+            'Both tabs moved, so both are redrawn'
+        );
+    }
+
+    @isTest
+    static void shouldTellTheRequesterWhenTheirLeaveIsRejected() {
+        SlackHttpMock mock = mockSlack();
+        prepareResponse();
+        Leave_Request__c request = new Leave_Request__c(
+            Employee__c = staffMember().Id,
+            Approver__c = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = :ADMIN_SLACK_ID].Id,
+            Leave_Type__c = [SELECT Id FROM Leave_Type__c LIMIT 1].Id,
+            From_Date__c = nextMonday(),
+            To_Date__c = nextMonday(),
+            Days__c = 1,
+            Status__c = 'Submitted'
+        );
+        insert request;
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(RestContext.response, JSON.serialize(
+            new Map<String, Object>{
+                'type' => 'block_actions',
+                'user' => new Map<String, Object>{ 'id' => ADMIN_SLACK_ID },
+                'response_url' => 'https://hooks.slack.test/replace',
+                'actions' => new List<Object>{
+                    new Map<String, Object>{
+                        'action_id' => 'reject_leave', 'value' => request.Id
+                    }
+                }
+            }
+        ));
+        Test.stopTest();
+
+        Assert.areEqual('Rejected',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'The rejection is recorded');
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', 'rejected'),
+            'Being told matters most when the answer is no: ' +
+                mock.allSaidTo('chat.postMessage')
+        );
+    }
+
+    @isTest
+    static void shouldSayOnlyTheConfirmationAfterApplyingForLeave() {
+        SlackHttpMock mock = mockSlack();
+        prepareResponse();
+        // A decided request already in their history, which they did not ask to
+        // see again while applying for something new.
+        insert new Leave_Request__c(
+            Employee__c = staffMember().Id,
+            Leave_Type__c = [SELECT Id FROM Leave_Type__c LIMIT 1].Id,
+            From_Date__c = Date.today().addDays(-30),
+            To_Date__c = Date.today().addDays(-30),
+            Days__c = 1,
+            Status__c = 'Rejected'
+        );
+        Date monday = nextMonday();
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(RestContext.response, submissionPayload(
+            SlackLeaveApply.APPLY_CALLBACK, null,
+            new Map<String, Object>{
+                'leave_type' => picked([SELECT Id FROM Leave_Type__c LIMIT 1].Id),
+                'from_date' => dated(monday),
+                'to_date' => dated(monday),
+                'half_day' => picked('no')
+            },
+            STAFF_SLACK_ID
+        ));
+        Test.stopTest();
+
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', 'Leave requested'),
+            'The confirmation is the point: ' + mock.allSaidTo('chat.postMessage')
+        );
+        Assert.isFalse(
+            mock.saidInAny('chat.postMessage', 'Your leave requests'),
+            'Their whole history afterwards buries it under something nobody asked for'
+        );
+    }
+
     // ---- what it refuses -------------------------------------------------
 
     @isTest
