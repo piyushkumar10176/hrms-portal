@@ -20,13 +20,34 @@ public with sharing class SlackEventWorker implements Queueable, Database.Allows
 
             if (type == 'team_join') {
                 linkNewMember((Map<String, Object>) event.get('user'));
+                return;
             }
-            // app_home_opened draws the Home tab, which arrives with the port of
-            // the Home view. Acknowledged already, so nothing is retried.
+            if (type == 'app_home_opened') {
+                // The user field is a plain member id on this event, unlike
+                // team_join where it is an object.
+                refreshHome(String.valueOf(event.get('user')));
+            }
         } catch (Exception e) {
             System.debug(LoggingLevel.ERROR,
                 'Slack event failed: ' + e.getTypeName() + ': ' + e.getMessage());
         }
+    }
+
+    /**
+     * Redraws somebody's Home tab.
+     *
+     * Rebuilt on every open rather than cached, so it is never stale. An
+     * unlinked account still gets a coherent tab explaining why it is empty.
+     */
+    public static void refreshHome(String slackUserId) {
+        if (String.isBlank(slackUserId)) {
+            return;
+        }
+        Employee__c employee = SlackEmployeeLookup.forSlackUser(slackUserId);
+        SlackApi.publishHome(
+            slackUserId,
+            employee == null ? SlackHomeView.buildUnlinked() : SlackHomeView.build(employee)
+        );
     }
 
     /** Matches a new member to an employee by email and records the id. */

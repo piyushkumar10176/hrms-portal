@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Bot_Token__c</fullName>
+    <label>Slack Bot Token</label>
+    <description>The bot token for the Salesforce-native Slack app, used for calls this org starts: drawing the Home tab, opening a modal, or sending a direct message. Replies to a slash command do not need it, because the response_url Slack supplies is itself the credential. Kept here rather than in the Named Credential so the new app and the older hosted one can run side by side without sharing a token.</description>
+    <inlineHelpText>Slack app, OAuth and Permissions, Bot User OAuth Token. Starts xoxb-.</inlineHelpText>
+    <type>Text</type>
+    <length>255</length>
+    <required>false</required>
+</CustomField>

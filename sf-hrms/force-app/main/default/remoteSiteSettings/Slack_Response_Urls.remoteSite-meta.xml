@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<RemoteSiteSetting xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Where a delayed answer to a slash command is posted. Without this the acknowledgement arrives and the real answer never does.</description>
+    <disableProtocolSecurity>false</disableProtocolSecurity>
+    <isActive>true</isActive>
+    <url>https://hooks.slack.com</url>
+</RemoteSiteSetting>
