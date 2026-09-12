@@ -25,6 +25,7 @@ import { assertSalesforceId } from "@/lib/soql";
 import { countWorkingDays, SHIFT_START, SHIFT_END, SHIFT_MIDPOINT, type HalfDaySession } from "@/lib/leave-days";
 import { availableDays } from "@/lib/leave-balance";
 import { businessToday } from "@/lib/business-time";
+import { handleHomeAction } from "@/slack/actions/home";
 
 export const dynamic = "force-dynamic";
 
@@ -109,6 +110,12 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
     const actor = await employeeForSlackUser(slackUserId);
     if (!actor) {
       await postToResponseUrl(responseUrl, ephemeral("Your Slack account is not linked to an employee."));
+      return;
+    }
+
+    // Home tab buttons first. They carry no response_url, so anything below
+    // that replies through one would fail silently for them.
+    if (await handleHomeAction(action.action_id, actor, slackUserId)) {
       return;
     }
 

@@ -5,7 +5,8 @@
  * acknowledges everything else immediately; Slack retries anything not answered
  * within 3 seconds, so this route never does real work inline.
  *
- * The one event acted on is team_join. Employees are matched to Slack accounts
+ * Two events are acted on. app_home_opened draws the Home tab, which is the
+ * app's front door: open it and today's state is already there. team_join. Employees are matched to Slack accounts
  * by email address, and doing that by hand is why only two of twenty-eight are
  * linked today. When somebody accepts their Slack invitation, this fills in
  * Slack_User_Id__c for them, so notifications start working without anyone
@@ -16,6 +17,7 @@ import { NextRequest, NextResponse, after } from "next/server";
 import { verifySlackRequest } from "@/lib/slack-verify";
 import { queryOneOrNull, updateRecord } from "@/lib/salesforce";
 import { escapeSoqlString } from "@/lib/soql";
+import { refreshHome } from "@/slack/home/publish";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +45,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let payload: { type?: string; challenge?: string; event?: SlackTeamJoinEvent };
+  let payload: {
+    type?: string;
+    challenge?: string;
+    event?: SlackTeamJoinEvent & { user?: string | { id?: string }; tab?: string };
+  };
   try {
     payload = JSON.parse(rawBody);
   } catch {
@@ -56,6 +62,17 @@ export async function POST(req: NextRequest) {
       status: 200,
       headers: { "Content-Type": "text/plain" },
     });
+  }
+
+  // The Home tab is rebuilt on every open, so it is never stale. after() rather
+  // than a floating promise: a serverless invocation is frozen once it responds.
+  if (payload.event?.type === "app_home_opened" && payload.event?.tab === "home") {
+    const opener = typeof payload.event.user === "string"
+      ? payload.event.user
+      : payload.event.user?.id;
+    if (opener) {
+      after(() => refreshHome(opener));
+    }
   }
 
   if (payload.event?.type === "team_join") {
