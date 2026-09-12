@@ -1,0 +1,91 @@
+{
+  "display_information": {
+    "name": "Slack HRMS",
+    "description": "Leave, attendance and approvals, served by Salesforce directly",
+    "background_color": "#0b5394",
+    "long_description": "Slack HRMS puts leave, attendance and approvals where people already work. Apply for leave, clock in and out, approve your team's requests and see who is off, without opening another application. Every record lives in Salesforce, which this app talks to directly. There is no separate server and no second copy of your data to keep in step."
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Slack HRMS",
+      "always_online": true
+    },
+    "slash_commands": [
+      {
+        "command": "/myleave",
+        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "description": "Your leave balance, apply for leave, or check status",
+        "usage_hint": "balance | apply | status",
+        "should_escape": false
+      },
+      {
+        "command": "/attendance",
+        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "description": "Clock in, clock out, or today's punches",
+        "usage_hint": "in | out | today",
+        "should_escape": false
+      },
+      {
+        "command": "/approvals",
+        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "description": "Requests waiting on your decision",
+        "usage_hint": "",
+        "should_escape": false
+      },
+      {
+        "command": "/whosout",
+        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "description": "Who is on leave today",
+        "usage_hint": "",
+        "should_escape": false
+      },
+      {
+        "command": "/regularize",
+        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "description": "Regularize a penalised attendance day",
+        "usage_hint": "",
+        "should_escape": false
+      },
+      {
+        "command": "/hrdash",
+        "url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/commands",
+        "description": "HR dashboard: who is out, leave counts, penalties",
+        "usage_hint": "",
+        "should_escape": false
+      }
+    ],
+    "app_home": {
+      "home_tab_enabled": true,
+      "messages_tab_enabled": true,
+      "messages_tab_read_only_enabled": false
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "commands",
+        "im:write",
+        "users:read",
+        "users:read.email",
+        "chat:write.public"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/events",
+      "bot_events": [
+        "app_home_opened",
+        "team_join"
+      ]
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://SALESFORCE-SITE-URL/services/apexrest/slack/interactivity"
+    },
+    "org_deploy_enabled": true,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}
