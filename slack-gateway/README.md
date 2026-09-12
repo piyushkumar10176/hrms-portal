@@ -43,6 +43,13 @@ Salesforce and Slack ones are the same values the portal already uses.
 After the first deploy, check `/api/health` before repointing Slack. It reports
 which settings are present as booleans, never their values.
 
+## A note on SLACK_TEAM_ID
+
+Leave it blank. Every call this gateway makes is aimed at a person, and those
+work without it. It is only needed for posts to a channel on an Enterprise Grid
+org-wide install, and the value would then be the workspace id beginning with
+`T`, not the enterprise id beginning with `E`.
+
 ## The shared code
 
 `src/lib` is a copy of the portal's, not a shared package. Extracting it would
