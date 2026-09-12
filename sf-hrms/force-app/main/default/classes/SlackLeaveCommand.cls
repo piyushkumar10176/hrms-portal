@@ -19,7 +19,12 @@ public inherited sharing class SlackLeaveCommand {
         ];
 
         if (balances.isEmpty()) {
-            return SlackBlocks.ephemeral('You have no leave types allocated yet. Ask HR to set them up.');
+            // Still offered: unpaid and newly configured types legitimately carry
+            // no balance row, so an empty list is not the same as no entitlement.
+            return SlackBlocks.ephemeral('You have no leave balance allocated yet.', new List<Object>{
+                SlackBlocks.section('You have no leave balance allocated yet.'),
+                applyButtons()
+            });
         }
 
         List<String> labels = new List<String>();
@@ -34,9 +39,21 @@ public inherited sharing class SlackLeaveCommand {
         List<Object> blocks = new List<Object>{
             SlackBlocks.header('Your leave'),
             SlackBlocks.fields(labels, values),
+            applyButtons(),
             SlackBlocks.context('Served by Salesforce directly.')
         };
         return SlackBlocks.ephemeral('Your leave balance', blocks);
+    }
+
+    /**
+     * The balance is where somebody decides to book leave, so the way to do it
+     * belongs next to it rather than in a command they have to remember.
+     */
+    private static Map<String, Object> applyButtons() {
+        return SlackBlocks.actions(new List<Object>{
+            SlackBlocks.button('Apply for leave', 'hrms_apply_leave', 'new', 'primary'),
+            SlackBlocks.button('My requests', 'home_my_requests', 'mine', null)
+        });
     }
 
     /** `/whosout`: who is away today, and who is working remotely. */

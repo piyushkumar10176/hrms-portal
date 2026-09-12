@@ -319,15 +319,16 @@ private class SlackGatewayRestTest {
         enableGateway();
         String payload = JSON.serialize(new Map<String, Object>{
             'type' => 'block_actions',
+            // Slack keeps the token inside the payload for an interaction, not
+            // beside it as a form field the way a slash command does.
+            'token' => VERIFY_TOKEN,
             'user' => new Map<String, Object>{ 'id' => 'U0TEST0001' },
             'response_url' => 'https://example.test/hook',
             'actions' => new List<Object>{
                 new Map<String, Object>{ 'action_id' => 'approve_leave', 'value' => '00000000000000AAAA' }
             }
         });
-        buildFormRequest('interactivity', new Map<String, String>{
-            'token' => VERIFY_TOKEN, 'payload' => payload
-        });
+        buildFormRequest('interactivity', new Map<String, String>{ 'payload' => payload });
 
         Test.startTest();
         SlackGatewayRest.handle();
@@ -370,8 +371,9 @@ private class SlackGatewayRestTest {
     static void shouldCloseAModalOnSubmission() {
         enableGateway();
         buildFormRequest('interactivity', new Map<String, String>{
-            'token' => VERIFY_TOKEN,
-            'payload' => JSON.serialize(new Map<String, Object>{ 'type' => 'view_submission' })
+            'payload' => JSON.serialize(new Map<String, Object>{
+                'type' => 'view_submission', 'token' => VERIFY_TOKEN
+            })
         });
 
         Test.startTest();
@@ -380,6 +382,76 @@ private class SlackGatewayRestTest {
 
         Assert.areEqual(200, RestContext.response.statusCode,
             'A submission must be answered on the same response or Slack leaves the modal open');
+    }
+
+    @isTest
+    static void shouldAcceptAnInteractionWhoseTokenIsInsideThePayload() {
+        // The fault this was written for: an interaction carries no token form
+        // field, so reading params alone refused every button press with a 401
+        // while slash commands, which do send one, carried on working.
+        enableGateway();
+        buildFormRequest('interactivity', new Map<String, String>{
+            'payload' => JSON.serialize(new Map<String, Object>{
+                'type' => 'block_actions',
+                'token' => VERIFY_TOKEN,
+                'user' => new Map<String, Object>{ 'id' => 'U0TEST0001' },
+                'actions' => new List<Object>{
+                    new Map<String, Object>{ 'action_id' => 'home_view_punches', 'value' => 'log' }
+                }
+            })
+        });
+
+        Test.startTest();
+        SlackGatewayRest.handle();
+        Test.stopTest();
+
+        Assert.areEqual(200, RestContext.response.statusCode,
+            'A button press proves itself with the token inside its payload');
+    }
+
+    @isTest
+    static void shouldStillRefuseAnInteractionCarryingTheWrongToken() {
+        enableGateway();
+        buildFormRequest('interactivity', new Map<String, String>{
+            'payload' => JSON.serialize(new Map<String, Object>{
+                'type' => 'block_actions', 'token' => 'not-the-configured-token'
+            })
+        });
+
+        Test.startTest();
+        SlackGatewayRest.handle();
+        Test.stopTest();
+
+        Assert.areEqual(401, RestContext.response.statusCode,
+            'Looking inside the payload must not become a way in for anybody');
+    }
+
+    @isTest
+    static void shouldRefuseAnInteractionWithNoTokenAnywhere() {
+        enableGateway();
+        buildFormRequest('interactivity', new Map<String, String>{
+            'payload' => '{"type":"block_actions"}'
+        });
+
+        Test.startTest();
+        SlackGatewayRest.handle();
+        Test.stopTest();
+
+        Assert.areEqual(401, RestContext.response.statusCode,
+            'No proof at all is still no proof');
+    }
+
+    @isTest
+    static void shouldToleratePayloadThatIsNotJsonWhenLookingForTheToken() {
+        enableGateway();
+        buildFormRequest('interactivity', new Map<String, String>{ 'payload' => 'not json' });
+
+        Test.startTest();
+        SlackGatewayRest.handle();
+        Test.stopTest();
+
+        Assert.areEqual(401, RestContext.response.statusCode,
+            'Unparseable is not a token, and must refuse rather than throw');
     }
 
     /** Counts response_url posts. Apex forbids a static field on an inner class. */

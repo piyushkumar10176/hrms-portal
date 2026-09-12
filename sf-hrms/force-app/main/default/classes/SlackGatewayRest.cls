@@ -58,7 +58,7 @@ global without sharing class SlackGatewayRest {
                       config.Signing_Secret__c
                   )
                 : SlackRequestVerifier.verifyToken(
-                      request.params?.get('token'),
+                      tokenIn(request.params),
                       config.Verification_Token__c
                   );
 
@@ -130,6 +130,39 @@ global without sharing class SlackGatewayRest {
         // Acknowledged immediately. Slack redelivers anything not answered
         // within three seconds, and a retry storm is worse than a missed redraw.
         reply(response, 200, '{"ok":true}');
+    }
+
+    /**
+     * The verification token, wherever this kind of request keeps it.
+     *
+     * The two form-encoded endpoints do not agree. A slash command sends the
+     * token as a form field of its own, so it arrives in params. An interactive
+     * payload sends only "payload", and the token is a field inside that JSON.
+     * Reading params alone refused every button press with a 401 while slash
+     * commands worked, which is a confusing way to fail and worth naming here.
+     */
+    @TestVisible
+    private static String tokenIn(Map<String, String> params) {
+        if (params == null) {
+            return null;
+        }
+        String direct = params.get('token');
+        if (String.isNotBlank(direct)) {
+            return direct;
+        }
+        String payload = params.get('payload');
+        if (String.isBlank(payload)) {
+            return null;
+        }
+        try {
+            Map<String, Object> parsed =
+                (Map<String, Object>) JSON.deserializeUntyped(payload);
+            Object token = parsed.get('token');
+            return token == null ? null : String.valueOf(token);
+        } catch (Exception e) {
+            // Unparseable is not a token. The handler reports the bad payload.
+            return null;
+        }
     }
 
     private static String header(RestRequest request, String name) {
