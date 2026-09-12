@@ -164,6 +164,13 @@ function adminSection(data: HomeData): Block[] {
       button({ text: "Attendance", actionId: "admin_attendance" }),
       button({ text: "Who is in today", actionId: "admin_today_attendance" })
     ),
+    actions(
+      button({ text: "Link Slack accounts", actionId: "admin_link_slack" })
+    ),
+    context(
+      "Linking matches employees to Slack by email address. Run it after inviting " +
+      "somebody, or if they are not receiving notifications."
+    ),
   ];
 }
 

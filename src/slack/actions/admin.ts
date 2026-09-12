@@ -19,6 +19,7 @@ import {
   sendPersonDay, sendPersonMonth, sendTodayAcrossCompany,
   openAddPunch, addPunch, openAttendancePicker,
 } from "../admin/attendance";
+import { runLinking } from "../admin/linking";
 
 export interface ModalState {
   values: Record<string, Record<string, Record<string, unknown>>>;
@@ -71,6 +72,11 @@ export async function handleAdminAction(
 
     case "admin_today_attendance":
       await sendTodayAcrossCompany(actor, slackUserId);
+      return true;
+
+    case "admin_link_slack":
+      await runLinking(actor, slackUserId);
+      await refreshHome(slackUserId);
       return true;
 
     case "admin_add_punch": {
