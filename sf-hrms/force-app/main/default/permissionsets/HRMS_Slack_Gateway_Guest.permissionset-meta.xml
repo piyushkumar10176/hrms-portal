@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>HRMS_Slack_Gateway_Guest</fullName>
+    <label>HRMS Slack Gateway Guest</label>
+    <description>Lets the Salesforce Site guest user execute the Slack gateway, and nothing else. Granted by permission set rather than on the profile so it is deployable and reviewable.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <classAccesses>
+        <apexClass>SlackGatewayRest</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+</PermissionSet>
