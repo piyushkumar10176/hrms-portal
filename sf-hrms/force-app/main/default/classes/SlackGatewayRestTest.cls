@@ -255,6 +255,89 @@ private class SlackGatewayRestTest {
     }
 
     @isTest
+    static void shouldApproveFromAButton() {
+        Employee__c approver = [SELECT Id, Name FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'];
+        Employee__c asker = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1];
+        Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
+        Leave_Request__c request = TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Submitted');
+        insert request;
+        Test.setMock(HttpCalloutMock.class, new ResponseUrlMock());
+
+        Test.startTest();
+        System.enqueueJob(new SlackDecisionWorker(request.Id, true, 'U0TEST0001', 'https://example.test/hook'));
+        Test.stopTest();
+
+        Assert.areEqual('Approved',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'The named approver can approve');
+        // At least one: the worker replaces the message, and approving also fires
+        // LeaveRequestTrigger, which notifies the employee through the same mock.
+        Assert.isTrue(responseUrlCalls >= 1,
+            'The original message is replaced, was ' + responseUrlCalls + ' call(s)');
+    }
+
+    @isTest
+    static void shouldRefuseDecidingYourOwnRequest() {
+        // The one rule with no exception, including for HR and administrators.
+        Employee__c self = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'];
+        Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
+        Leave_Request__c request = TestDataFactory.buildLeaveRequest(self, self, leaveType, 1, 'Submitted');
+        insert request;
+        Test.setMock(HttpCalloutMock.class, new ResponseUrlMock());
+
+        Test.startTest();
+        System.enqueueJob(new SlackDecisionWorker(request.Id, true, 'U0TEST0001', 'https://example.test/hook'));
+        Test.stopTest();
+
+        Assert.areEqual('Submitted',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'Somebody cannot approve their own request even as an admin');
+    }
+
+    @isTest
+    static void shouldNotDecideTwice() {
+        // Two people pressing at once is normal here, not an edge case: the
+        // request is visible to the manager and to everyone in the HR channel.
+        Employee__c approver = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = 'U0TEST0001'];
+        Employee__c asker = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = NULL LIMIT 1];
+        Leave_Type__c leaveType = [SELECT Id FROM Leave_Type__c LIMIT 1];
+        Leave_Request__c request = TestDataFactory.buildLeaveRequest(asker, approver, leaveType, 1, 'Approved');
+        insert request;
+        Test.setMock(HttpCalloutMock.class, new ResponseUrlMock());
+
+        Test.startTest();
+        System.enqueueJob(new SlackDecisionWorker(request.Id, false, 'U0TEST0001', 'https://example.test/hook'));
+        Test.stopTest();
+
+        Assert.areEqual('Approved',
+            [SELECT Status__c FROM Leave_Request__c WHERE Id = :request.Id].Status__c,
+            'An already decided request is not flipped by a second press');
+    }
+
+    @isTest
+    static void shouldAcknowledgeAButtonPressImmediately() {
+        enableGateway();
+        String payload = JSON.serialize(new Map<String, Object>{
+            'type' => 'block_actions',
+            'user' => new Map<String, Object>{ 'id' => 'U0TEST0001' },
+            'response_url' => 'https://example.test/hook',
+            'actions' => new List<Object>{
+                new Map<String, Object>{ 'action_id' => 'approve_leave', 'value' => '00000000000000AAAA' }
+            }
+        });
+        buildFormRequest('interactivity', new Map<String, String>{
+            'token' => VERIFY_TOKEN, 'payload' => payload
+        });
+
+        Test.startTest();
+        SlackGatewayRest.handle();
+        Test.stopTest();
+
+        Assert.areEqual(200, RestContext.response.statusCode,
+            'A button press is acknowledged immediately whatever the value turns out to be');
+    }
+
+    @isTest
     static void shouldCutBlocksRatherThanLetSlackDropThem() {
         // Slack truncates silently past its ceiling, so the cut has to happen here.
         List<Object> many = new List<Object>();
