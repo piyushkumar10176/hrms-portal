@@ -1,73 +1,231 @@
 <template>
-    <lightning-card title="Employees" icon-name="standard:people">
-        <div slot="actions" class="slds-button-group">
-            <lightning-button label={gapsLabel} onclick={toggleGaps}></lightning-button>
-            <lightning-button label={inactiveLabel} onclick={toggleInactive}></lightning-button>
+    <div class="console">
+        <!-- Masthead -->
+        <div class="masthead slds-var-p-around_medium">
+            <div class="slds-grid slds-grid_vertical-align-center slds-wrap">
+                <div class="slds-col slds-grow">
+                    <h1 class="masthead__title">HRMS Admin Console</h1>
+                    <p class="masthead__sub">
+                        The things that need a table. Everything else lives in Slack.
+                    </p>
+                </div>
+            </div>
         </div>
 
-        <div class="slds-var-p-horizontal_medium">
-            <template lwc:if={error}>
-                <div class="slds-box slds-theme_error slds-var-m-bottom_small" role="alert">
-                    {error}
-                </div>
-            </template>
-
-            <template lwc:if={hasGaps}>
-                <div class="slds-box slds-theme_shade slds-var-m-bottom_small">
-                    <strong>{gapCount}</strong> of {rowCount} people have something missing.
-                    Somebody with no manager has nobody to approve their leave, and somebody
-                    with no Slack account linked receives no notifications at all.
-                </div>
-            </template>
-
-            <!-- The bulk bar. Select rows, choose what to set, apply once. -->
-            <div class="slds-box slds-var-m-bottom_small">
-                <div class="slds-grid slds-wrap slds-gutters_x-small">
-                    <div class="slds-col slds-size_1-of-5">
-                        <lightning-combobox label="Department" value={departmentChoice}
-                            options={departmentOptions} onchange={handleDepartment}
-                            placeholder="Leave unchanged"></lightning-combobox>
-                    </div>
-                    <div class="slds-col slds-size_1-of-5">
-                        <lightning-combobox label="Designation" value={designationChoice}
-                            options={designationOptions} onchange={handleDesignation}
-                            placeholder="Leave unchanged"></lightning-combobox>
-                    </div>
-                    <div class="slds-col slds-size_1-of-5">
-                        <lightning-combobox label="Reports to" value={managerChoice}
-                            options={managerOptions} onchange={handleManager}
-                            placeholder="Leave unchanged"></lightning-combobox>
-                    </div>
-                    <div class="slds-col slds-size_1-of-5">
-                        <lightning-combobox label="Access level" value={roleChoice}
-                            options={roleOptions} onchange={handleRole}
-                            placeholder="Leave unchanged"></lightning-combobox>
-                    </div>
-                    <div class="slds-col slds-size_1-of-5 slds-align-bottom">
-                        <lightning-button variant="brand" label={applyLabel}
-                            disabled={applyDisabled} onclick={handleApply}
-                            class="slds-var-m-right_x-small"></lightning-button>
-                        <lightning-button label="Clear" onclick={clearChoices}></lightning-button>
-                    </div>
-                </div>
-                <p class="slds-text-body_small slds-text-color_weak slds-var-m-top_x-small">
-                    A field left blank is left alone, never cleared.
-                </p>
+        <template lwc:if={error}>
+            <div class="slds-var-m-around_medium slds-box slds-theme_error" role="alert">
+                {error}
             </div>
+        </template>
 
-            <div class="grid-scroll">
-                <lightning-datatable
-                    key-field="recordId"
-                    data={rows}
-                    columns={columns}
-                    onrowselection={handleRowSelection}
-                    column-widths-mode="auto">
-                </lightning-datatable>
-            </div>
+        <lightning-tabset variant="scoped" class="slds-var-p-horizontal_small">
 
-            <template lwc:if={saving}>
-                <lightning-spinner alternative-text="Saving" size="small"></lightning-spinner>
-            </template>
-        </div>
-    </lightning-card>
+            <!-- ============ EMPLOYEES ============ -->
+            <lightning-tab label="Employees" value="employees">
+                <div class="slds-grid slds-wrap slds-gutters_small slds-var-m-bottom_medium">
+                    <div class="slds-col slds-size_1-of-3">
+                        <div class="tile tile_good">
+                            <p class="tile__value">{healthyCount}</p>
+                            <p class="tile__label">Complete records</p>
+                        </div>
+                    </div>
+                    <div class="slds-col slds-size_1-of-3">
+                        <div class="tile tile_warn">
+                            <p class="tile__value">{gapCount}</p>
+                            <p class="tile__label">Need attention</p>
+                        </div>
+                    </div>
+                    <div class="slds-col slds-size_1-of-3">
+                        <div class="tile tile_neutral">
+                            <p class="tile__value">{rowCount}</p>
+                            <p class="tile__label">Total listed</p>
+                        </div>
+                    </div>
+                </div>
+
+                <template lwc:if={hasGaps}>
+                    <div class="notice slds-var-m-bottom_medium">
+                        <lightning-icon icon-name="utility:warning" size="x-small"
+                            variant="warning" class="slds-var-m-right_x-small"></lightning-icon>
+                        <span>
+                            <strong>{gapCount}</strong> of {rowCount} people have something missing.
+                            Somebody with no manager has nobody to approve their leave, and somebody
+                            with no Slack link receives no notifications at all.
+                        </span>
+                    </div>
+                </template>
+
+                <!-- Bulk bar -->
+                <div class="bulkbar slds-var-m-bottom_medium">
+                    <div class="slds-grid slds-wrap slds-gutters_x-small">
+                        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-5">
+                            <lightning-combobox label="Department" value={departmentChoice}
+                                options={departmentOptions} onchange={handleDepartment}
+                                placeholder="Leave unchanged"></lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-5">
+                            <lightning-combobox label="Designation" value={designationChoice}
+                                options={designationOptions} onchange={handleDesignation}
+                                placeholder="Leave unchanged"></lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-5">
+                            <lightning-combobox label="Reports to" value={managerChoice}
+                                options={managerOptions} onchange={handleManager}
+                                placeholder="Leave unchanged"></lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-5">
+                            <lightning-combobox label="Access level" value={roleChoice}
+                                options={roleOptions} onchange={handleRole}
+                                placeholder="Leave unchanged"></lightning-combobox>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-large-size_1-of-5 slds-align-bottom">
+                            <lightning-button variant="brand" label={applyLabel}
+                                disabled={applyDisabled} onclick={handleApply}
+                                class="slds-var-m-right_xx-small"></lightning-button>
+                            <lightning-button label="Clear" onclick={clearChoices}></lightning-button>
+                        </div>
+                    </div>
+                    <div class="bulkbar__hint slds-var-m-top_x-small">
+                        {selectionHint} A field left blank is left alone, never cleared.
+                    </div>
+                </div>
+
+                <div class="slds-grid slds-grid_align-spread slds-var-m-bottom_x-small">
+                    <div class="slds-button-group">
+                        <lightning-button label={gapsLabel} variant={gapsVariant}
+                            onclick={toggleGaps}></lightning-button>
+                        <lightning-button label={inactiveLabel}
+                            onclick={toggleInactive}></lightning-button>
+                    </div>
+                    <template lwc:if={hasSelection}>
+                        <lightning-button label="Clear selection" variant="base"
+                            onclick={clearSelection}></lightning-button>
+                    </template>
+                </div>
+
+                <div class="tablewrap">
+                    <lightning-datatable
+                        key-field="recordId"
+                        data={rows}
+                        columns={employeeColumns}
+                        selected-rows={selectedIds}
+                        onrowselection={handleRowSelection}
+                        column-widths-mode="auto">
+                    </lightning-datatable>
+                </div>
+
+                <template lwc:if={saving}>
+                    <lightning-spinner alternative-text="Saving" size="small"></lightning-spinner>
+                </template>
+            </lightning-tab>
+
+            <!-- ============ ATTENDANCE ============ -->
+            <lightning-tab label="Attendance" value="attendance">
+                <div class="slds-grid slds-wrap slds-grid_vertical-align-end slds-gutters_small slds-var-m-bottom_medium">
+                    <div class="slds-col slds-size_1-of-2 slds-large-size_1-of-4">
+                        <lightning-input type="date" label="Day" value={attendanceDate}
+                            onchange={handleAttendanceDate}></lightning-input>
+                    </div>
+                    <div class="slds-col slds-align-bottom">
+                        <lightning-button label="Today" onclick={attendanceToday}></lightning-button>
+                    </div>
+                </div>
+
+                <div class="slds-grid slds-wrap slds-gutters_small slds-var-m-bottom_medium">
+                    <div class="slds-col slds-size_1-of-2 slds-large-size_1-of-4">
+                        <div class="tile tile_good">
+                            <p class="tile__value">{attendanceSummary.present}</p>
+                            <p class="tile__label">Present</p>
+                        </div>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-large-size_1-of-4">
+                        <div class="tile tile_info">
+                            <p class="tile__value">{attendanceSummary.halfDay}</p>
+                            <p class="tile__label">Half day</p>
+                        </div>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-large-size_1-of-4">
+                        <div class="tile tile_warn">
+                            <p class="tile__value">{attendanceSummary.flagged}</p>
+                            <p class="tile__label">Flagged</p>
+                        </div>
+                    </div>
+                    <div class="slds-col slds-size_1-of-2 slds-large-size_1-of-4">
+                        <div class="tile tile_neutral">
+                            <p class="tile__value">{attendanceSummary.noShow}</p>
+                            <p class="tile__label">No record</p>
+                        </div>
+                    </div>
+                </div>
+
+                <template lwc:if={hasAttendance}>
+                    <div class="tablewrap">
+                        <lightning-datatable key-field="employeeId" data={attendanceRows}
+                            columns={attendanceColumns} hide-checkbox-column
+                            column-widths-mode="auto"></lightning-datatable>
+                    </div>
+                </template>
+                <template lwc:else>
+                    <div class="empty">
+                        <lightning-icon icon-name="utility:clock" size="small"></lightning-icon>
+                        <p>No attendance recorded for {attendanceSummary.forDate}.</p>
+                    </div>
+                </template>
+            </lightning-tab>
+
+            <!-- ============ WHO IS ON LEAVE ============ -->
+            <lightning-tab label="On leave" value="leave">
+                <div class="slds-grid slds-wrap slds-grid_vertical-align-end slds-gutters_small slds-var-m-bottom_medium">
+                    <div class="slds-col slds-size_1-of-2 slds-large-size_1-of-4">
+                        <lightning-input type="date" label="Day" value={leaveDate}
+                            onchange={handleLeaveDate}></lightning-input>
+                    </div>
+                    <div class="slds-col slds-align-bottom">
+                        <lightning-button label="Today" onclick={leaveToday}></lightning-button>
+                    </div>
+                </div>
+
+                <template lwc:if={everyoneIn}>
+                    <div class="empty empty_good">
+                        <lightning-icon icon-name="utility:success" size="small"
+                            variant="success"></lightning-icon>
+                        <p>Everybody is in. Nobody is on leave or working remotely.</p>
+                    </div>
+                </template>
+
+                <template lwc:if={hasAway}>
+                    <h2 class="sectionhead">
+                        Away <span class="pill pill_away">{awayCount}</span>
+                    </h2>
+                    <div class="tablewrap slds-var-m-bottom_medium">
+                        <lightning-datatable key-field="name" data={awayRows}
+                            columns={leaveColumns} hide-checkbox-column
+                            column-widths-mode="auto"></lightning-datatable>
+                    </div>
+                </template>
+
+                <template lwc:if={hasRemote}>
+                    <h2 class="sectionhead">
+                        Working remotely <span class="pill pill_remote">{remoteCount}</span>
+                    </h2>
+                    <div class="tablewrap slds-var-m-bottom_medium">
+                        <lightning-datatable key-field="name" data={remoteRows}
+                            columns={leaveColumns} hide-checkbox-column
+                            column-widths-mode="auto"></lightning-datatable>
+                    </div>
+                </template>
+
+                <template lwc:if={hasUpcoming}>
+                    <h2 class="sectionhead">
+                        Coming up, next 14 days <span class="pill pill_soon">{upcomingCount}</span>
+                    </h2>
+                    <div class="tablewrap">
+                        <lightning-datatable key-field="name" data={upcomingRows}
+                            columns={leaveColumns} hide-checkbox-column
+                            column-widths-mode="auto"></lightning-datatable>
+                    </div>
+                </template>
+            </lightning-tab>
+        </lightning-tabset>
+    </div>
 </template>

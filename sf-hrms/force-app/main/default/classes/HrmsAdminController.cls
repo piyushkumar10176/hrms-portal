@@ -287,6 +287,184 @@ public with sharing class HrmsAdminController {
         return failures;
     }
 
+    // ---- Attendance ------------------------------------------------------
+
+    /** One person's day on the attendance tab. */
+    public class AttendanceRow {
+        @AuraEnabled public Id employeeId;
+        @AuraEnabled public String name;
+        @AuraEnabled public String employeeCode;
+        @AuraEnabled public String department;
+        @AuraEnabled public String checkIn;
+        @AuraEnabled public String checkOut;
+        @AuraEnabled public Decimal workedHours;
+        @AuraEnabled public Decimal breakMinutes;
+        @AuraEnabled public String status;
+        @AuraEnabled public Boolean penalty;
+        @AuraEnabled public String penaltyReason;
+    }
+
+    public class AttendanceDay {
+        @AuraEnabled public String forDate;
+        @AuraEnabled public List<AttendanceRow> rows;
+        @AuraEnabled public Integer present;
+        @AuraEnabled public Integer halfDay;
+        @AuraEnabled public Integer flagged;
+        @AuraEnabled public Integer headcount;
+        /** Active employees with no attendance record on that date at all. */
+        @AuraEnabled public Integer noShow;
+    }
+
+    /**
+     * Attendance for everybody on one day.
+     *
+     * @param forDate the business date, or null for today
+     */
+    @AuraEnabled(cacheable=true)
+    public static AttendanceDay loadAttendance(Date forDate) {
+        try {
+            Date target = forDate == null
+                ? AttendanceRollupService.businessDateOf(System.now())
+                : forDate;
+            String zone = AttendanceRollupService.businessTimeZoneName();
+
+            AttendanceDay day = new AttendanceDay();
+            day.forDate = String.valueOf(target);
+            day.rows = new List<AttendanceRow>();
+            day.present = 0;
+            day.halfDay = 0;
+            day.flagged = 0;
+
+            for (Attendance__c record : [
+                SELECT Employee__c, Employee__r.Name, Employee__r.Employee_Code__c,
+                       Employee__r.Department__c, Check_In__c, Check_Out__c,
+                       Total_Hours__c, Break_Minutes__c, Status__c,
+                       Penalty__c, Penalty_Reason__c
+                FROM Attendance__c
+                WHERE Date__c = :target
+                WITH USER_MODE
+                ORDER BY Employee__r.Name
+                LIMIT 2000
+            ]) {
+                AttendanceRow row = new AttendanceRow();
+                row.employeeId = record.Employee__c;
+                row.name = record.Employee__r == null ? 'Unknown' : record.Employee__r.Name;
+                row.employeeCode = record.Employee__r == null ? null : record.Employee__r.Employee_Code__c;
+                row.department = record.Employee__r == null ? null : record.Employee__r.Department__c;
+                // Rendered here rather than in the browser so every reader sees
+                // the business time zone, not whatever their laptop is set to.
+                row.checkIn = record.Check_In__c == null ? null : record.Check_In__c.format('HH:mm', zone);
+                row.checkOut = record.Check_Out__c == null ? null : record.Check_Out__c.format('HH:mm', zone);
+                row.workedHours = record.Total_Hours__c;
+                row.breakMinutes = record.Break_Minutes__c;
+                row.status = record.Status__c;
+                row.penalty = record.Penalty__c;
+                row.penaltyReason = record.Penalty_Reason__c;
+                day.rows.add(row);
+
+                if (record.Status__c == 'Present') day.present++;
+                if (record.Status__c == 'Half Day') day.halfDay++;
+                if (record.Penalty__c == true) day.flagged++;
+            }
+
+            day.headcount = [
+                SELECT COUNT() FROM Employee__c WHERE Employee_Status__c = 'Active' WITH USER_MODE
+            ];
+            day.noShow = day.headcount - day.rows.size();
+            if (day.noShow < 0) day.noShow = 0;
+            return day;
+        } catch (Exception e) {
+            throw asUserFacing(e, 'Could not load attendance for that day.');
+        }
+    }
+
+    // ---- Leave -----------------------------------------------------------
+
+    public class LeaveRow {
+        @AuraEnabled public String name;
+        @AuraEnabled public String employeeCode;
+        @AuraEnabled public String department;
+        @AuraEnabled public String leaveType;
+        @AuraEnabled public Date fromDate;
+        @AuraEnabled public Date toDate;
+        @AuraEnabled public Decimal days;
+        @AuraEnabled public Boolean halfDay;
+        /** Work from home is leave in the data model, but it is not absence. */
+        @AuraEnabled public Boolean remote;
+    }
+
+    public class LeaveToday {
+        @AuraEnabled public String forDate;
+        @AuraEnabled public List<LeaveRow> away;
+        @AuraEnabled public List<LeaveRow> remote;
+        @AuraEnabled public List<LeaveRow> upcoming;
+    }
+
+    /**
+     * Who is off today, who is working remotely, and what is coming up.
+     *
+     * @param forDate the business date, or null for today
+     */
+    @AuraEnabled(cacheable=true)
+    public static LeaveToday loadLeave(Date forDate) {
+        try {
+            Date target = forDate == null
+                ? AttendanceRollupService.businessDateOf(System.now())
+                : forDate;
+
+            LeaveToday result = new LeaveToday();
+            result.forDate = String.valueOf(target);
+            result.away = new List<LeaveRow>();
+            result.remote = new List<LeaveRow>();
+            result.upcoming = new List<LeaveRow>();
+
+            Date horizon = target.addDays(14);
+
+            for (Leave_Request__c request : [
+                SELECT Employee__r.Name, Employee__r.Employee_Code__c, Employee__r.Department__c,
+                       Leave_Type__r.Name, Leave_Type__r.Code__c,
+                       From_Date__c, To_Date__c, Days__c, Half_Day__c
+                FROM Leave_Request__c
+                WHERE Status__c = 'Approved'
+                  AND To_Date__c >= :target
+                  AND From_Date__c <= :horizon
+                WITH USER_MODE
+                ORDER BY From_Date__c, Employee__r.Name
+                LIMIT 500
+            ]) {
+                LeaveRow row = new LeaveRow();
+                row.name = request.Employee__r == null ? 'Unknown' : request.Employee__r.Name;
+                row.employeeCode = request.Employee__r == null ? null : request.Employee__r.Employee_Code__c;
+                row.department = request.Employee__r == null ? null : request.Employee__r.Department__c;
+                row.leaveType = request.Leave_Type__r == null ? 'Leave' : request.Leave_Type__r.Name;
+                row.fromDate = request.From_Date__c;
+                row.toDate = request.To_Date__c;
+                row.days = request.Days__c;
+                row.halfDay = request.Half_Day__c;
+                row.remote = isRemote(request.Leave_Type__r);
+
+                Boolean activeToday =
+                    request.From_Date__c <= target && request.To_Date__c >= target;
+                if (activeToday) {
+                    if (row.remote) result.remote.add(row);
+                    else result.away.add(row);
+                } else {
+                    result.upcoming.add(row);
+                }
+            }
+            return result;
+        } catch (Exception e) {
+            throw asUserFacing(e, 'Could not load the leave list.');
+        }
+    }
+
+    private static Boolean isRemote(Leave_Type__c leaveType) {
+        if (leaveType == null) return false;
+        String code = leaveType.Code__c == null ? '' : leaveType.Code__c.toUpperCase();
+        String name = leaveType.Name == null ? '' : leaveType.Name.toLowerCase();
+        return code == 'WFH' || name.contains('work from home') || name.contains('remote');
+    }
+
     /**
      * Wraps a failure for the client without leaking internals.
      *

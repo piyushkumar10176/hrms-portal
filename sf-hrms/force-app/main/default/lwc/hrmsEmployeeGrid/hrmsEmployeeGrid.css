@@ -1,6 +1,140 @@
-/* A long roster should scroll inside the card rather than pushing the page. */
-.grid-scroll {
-    max-height: 32rem;
-    overflow-y: auto;
-    overflow-x: auto;
+/*
+ * Styling leans on SLDS design tokens rather than fixed colours, so the console
+ * follows the org's theme and stays legible if that theme changes.
+ */
+
+.console {
+    background: var(--lwc-colorBackground, #f3f3f3);
+    border-radius: var(--lwc-borderRadiusMedium, 0.25rem);
+    overflow: hidden;
 }
+
+/* Masthead ------------------------------------------------------------- */
+.masthead {
+    background: linear-gradient(135deg, #1b5297 0%, #0b7fc7 100%);
+    color: #fff;
+}
+
+.masthead__title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0;
+}
+
+.masthead__sub {
+    font-size: 0.8125rem;
+    opacity: 0.85;
+    margin: 0.25rem 0 0;
+}
+
+/* Summary tiles -------------------------------------------------------- */
+.tile {
+    background: #fff;
+    border: 1px solid var(--lwc-colorBorder, #e5e5e5);
+    border-top: 3px solid var(--lwc-colorBorder, #e5e5e5);
+    border-radius: var(--lwc-borderRadiusMedium, 0.25rem);
+    padding: 0.75rem 1rem;
+    text-align: center;
+    height: 100%;
+}
+
+.tile__value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.1;
+    /* Keeps the figures from shifting sideways as they change. */
+    font-variant-numeric: tabular-nums;
+    color: var(--lwc-colorTextDefault, #181818);
+}
+
+.tile__label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--lwc-colorTextWeak, #747474);
+    margin-top: 0.125rem;
+}
+
+.tile_good  { border-top-color: #2e844a; }
+.tile_warn  { border-top-color: #fe9339; }
+.tile_info  { border-top-color: #0b7fc7; }
+.tile_neutral { border-top-color: #aeaeae; }
+
+.tile_good .tile__value { color: #2e844a; }
+.tile_warn .tile__value { color: #a86403; }
+.tile_info .tile__value { color: #0b7fc7; }
+
+/* Notice --------------------------------------------------------------- */
+.notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.25rem;
+    background: #fef8f3;
+    border-left: 3px solid #fe9339;
+    border-radius: 0.25rem;
+    padding: 0.75rem 1rem;
+    font-size: 0.8125rem;
+}
+
+/* Bulk bar ------------------------------------------------------------- */
+.bulkbar {
+    background: #fff;
+    border: 1px solid var(--lwc-colorBorder, #e5e5e5);
+    border-radius: var(--lwc-borderRadiusMedium, 0.25rem);
+    padding: 1rem;
+}
+
+.bulkbar__hint {
+    font-size: 0.75rem;
+    color: var(--lwc-colorTextWeak, #747474);
+}
+
+/* Tables --------------------------------------------------------------- */
+.tablewrap {
+    background: #fff;
+    border: 1px solid var(--lwc-colorBorder, #e5e5e5);
+    border-radius: var(--lwc-borderRadiusMedium, 0.25rem);
+    /* A long roster scrolls inside its own box rather than pushing the page. */
+    max-height: 34rem;
+    overflow: auto;
+}
+
+/* Section headings ----------------------------------------------------- */
+.sectionhead {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9375rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem;
+}
+
+.pill {
+    display: inline-block;
+    min-width: 1.5rem;
+    padding: 0.0625rem 0.5rem;
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+
+.pill_away   { background: #feddc7; color: #8c4b02; }
+.pill_remote { background: #cfe9fe; color: #05628a; }
+.pill_soon   { background: #ecebea; color: #444; }
+
+/* Empty states --------------------------------------------------------- */
+.empty {
+    background: #fff;
+    border: 1px dashed var(--lwc-colorBorder, #d8d8d8);
+    border-radius: var(--lwc-borderRadiusMedium, 0.25rem);
+    padding: 2.5rem 1rem;
+    text-align: center;
+    color: var(--lwc-colorTextWeak, #747474);
+    font-size: 0.875rem;
+}
+
+.empty p { margin-top: 0.5rem; }
+.empty_good { border-style: solid; border-color: #b5e5c2; background: #f4fbf6; }

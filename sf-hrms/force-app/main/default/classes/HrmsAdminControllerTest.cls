@@ -140,6 +140,70 @@ private class HrmsAdminControllerTest {
     }
 
     @isTest
+    static void shouldReturnAttendanceForADay() {
+        List<Employee__c> staff = employees();
+        Date workday = Date.newInstance(2026, 9, 9);
+        insert new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(staff[0], TestDataFactory.istInstant(workday, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(staff[0], TestDataFactory.istInstant(workday, 19, 0), 'Check-Out')
+        };
+
+        Test.startTest();
+        HrmsAdminController.AttendanceDay day = HrmsAdminController.loadAttendance(workday);
+        Test.stopTest();
+
+        Assert.areEqual(1, day.rows.size(), 'One person has attendance that day');
+        Assert.areEqual('10:00', day.rows[0].checkIn, 'Rendered in business time, not the org time zone');
+        Assert.areEqual('19:00', day.rows[0].checkOut, 'Rendered in business time');
+        Assert.areEqual(4, day.headcount, 'Every active employee counts toward headcount');
+        Assert.areEqual(3, day.noShow, 'The three with no record are counted as absent from the list');
+    }
+
+    @isTest
+    static void shouldDefaultAttendanceToToday_WhenNoDateGiven() {
+        Test.startTest();
+        HrmsAdminController.AttendanceDay day = HrmsAdminController.loadAttendance(null);
+        Test.stopTest();
+
+        Assert.areEqual(
+            String.valueOf(AttendanceRollupService.businessDateOf(System.now())),
+            day.forDate,
+            'A null date means today in business time'
+        );
+    }
+
+    @isTest
+    static void shouldSeparateLeaveFromWorkingRemotely() {
+        // Work from home is leave in the data model but it is not absence, and
+        // showing somebody as away when they are working would be wrong.
+        List<Employee__c> staff = employees();
+        Leave_Type__c annual = TestDataFactory.createLeaveType('Annual Leave', 18, true);
+        Leave_Type__c wfh = TestDataFactory.createLeaveType('Work From Home', 24, true);
+        TestDataFactory.createLeaveBalances(staff, annual, 0, 18, true);
+        TestDataFactory.createLeaveBalances(staff, wfh, 0, 24, true);
+
+        Date today = AttendanceRollupService.businessDateOf(System.now());
+        List<Leave_Request__c> requests = new List<Leave_Request__c>{
+            TestDataFactory.buildLeaveRequest(staff[0], staff[3], annual, 1, 'Approved'),
+            TestDataFactory.buildLeaveRequest(staff[1], staff[3], wfh, 1, 'Approved')
+        };
+        for (Leave_Request__c r : requests) {
+            r.From_Date__c = today;
+            r.To_Date__c = today;
+        }
+        insert requests;
+
+        Test.startTest();
+        HrmsAdminController.LeaveToday result = HrmsAdminController.loadLeave(today);
+        Test.stopTest();
+
+        Assert.areEqual(1, result.away.size(), 'Annual leave counts as away');
+        Assert.areEqual(1, result.remote.size(), 'Work from home counts as remote, not away');
+        Assert.isTrue(result.remote[0].remote, 'And is flagged as remote');
+        Assert.isFalse(result.away[0].remote, 'While ordinary leave is not');
+    }
+
+    @isTest
     static void shouldSaveRowEditsFromTheGrid() {
         List<Employee__c> staff = employees();
         HrmsAdminController.EmployeeRow row = new HrmsAdminController.EmployeeRow();
