@@ -9,7 +9,19 @@
  * swallowed. A command that silently does nothing is the worst outcome: they
  * retype it, and nobody learns anything.
  */
-public with sharing class SlackAsyncWorker implements Queueable, Database.AllowsCallouts {
+/**
+ * SHARING NOTE
+ *
+ * This runs as the Salesforce Site guest user, which has no identity of its own.
+ * Salesforce forces guest users to private record access whatever the org-wide
+ * default says, so "with sharing" here means seeing nothing at all, and the Home
+ * tab renders as if nobody is linked.
+ *
+ * Identity comes from the signed Slack payload, and every authorisation decision
+ * is made explicitly against the employee it names. Record sharing for the guest
+ * is therefore meaningless rather than protective.
+ */
+public without sharing class SlackAsyncWorker implements Queueable, Database.AllowsCallouts {
 
     private final String command;
     private final String argument;
@@ -46,27 +58,27 @@ public with sharing class SlackAsyncWorker implements Queueable, Database.Allows
 
     /** Routes to the right command. */
     private String answer(Employee__c employee) {
-        if (command == '/myleave') {
+        if (command == '/hrms-leave') {
             return SlackLeaveCommand.balance(employee);
         }
-        if (command == '/whosout') {
+        if (command == '/hrms-whosout') {
             return SlackLeaveCommand.whoIsOut();
         }
-        if (command == '/attendance') {
+        if (command == '/hrms-attendance') {
             return SlackAttendanceCommand.run(employee, argument);
         }
-        if (command == '/approvals') {
+        if (command == '/hrms-approvals') {
             return SlackApprovalsCommand.pending(employee);
         }
-        if (command == '/hrdash') {
+        if (command == '/hrms-dash') {
             return SlackApprovalsCommand.dashboard(employee);
         }
-        if (command == '/regularize') {
+        if (command == '/hrms-regularize') {
             return SlackApprovalsCommand.regularize(employee);
         }
         return SlackBlocks.ephemeral(
-            'That command is not one I know. Try `/myleave`, `/attendance`, ' +
-            '`/approvals`, `/whosout`, `/regularize` or `/hrdash`.'
+            'That command is not one I know. Try `/hrms-leave`, `/hrms-attendance`, ' +
+            '`/hrms-approvals`, `/hrms-whosout`, `/hrms-regularize` or `/hrms-dash`.'
         );
     }
 

@@ -5,7 +5,7 @@
  * back to opening plus accrued less availed where it has not, which is the same
  * rule the portal applies.
  */
-public with sharing class SlackLeaveCommand {
+public inherited sharing class SlackLeaveCommand {
 
     /** `/myleave` with no argument: what the person has left. */
     public static String balance(Employee__c employee) {

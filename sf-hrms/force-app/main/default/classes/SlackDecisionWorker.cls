@@ -10,7 +10,19 @@
  * action and value come from the client, so they are a convenience and never the
  * authorisation boundary.
  */
-public with sharing class SlackDecisionWorker implements Queueable, Database.AllowsCallouts {
+/**
+ * SHARING NOTE
+ *
+ * This runs as the Salesforce Site guest user, which has no identity of its own.
+ * Salesforce forces guest users to private record access whatever the org-wide
+ * default says, so "with sharing" here means seeing nothing at all, and the Home
+ * tab renders as if nobody is linked.
+ *
+ * Identity comes from the signed Slack payload, and every authorisation decision
+ * is made explicitly against the employee it names. Record sharing for the guest
+ * is therefore meaningless rather than protective.
+ */
+public without sharing class SlackDecisionWorker implements Queueable, Database.AllowsCallouts {
 
     private final Id requestId;
     private final Boolean approving;

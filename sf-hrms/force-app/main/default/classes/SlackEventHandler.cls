@@ -5,7 +5,7 @@
  * anything it does not get a clean answer to within three seconds and a retry
  * storm is worse than a missed redraw.
  */
-public with sharing class SlackEventHandler {
+public inherited sharing class SlackEventHandler {
 
     public static void enqueue(Map<String, Object> event) {
         String type = String.valueOf(event.get('type'));

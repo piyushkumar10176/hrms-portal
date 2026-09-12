@@ -12,39 +12,39 @@
     },
     "slash_commands": [
       {
-        "command": "/myleave",
+        "command": "/hrms-leave",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Your leave balance",
         "usage_hint": "balance",
         "should_escape": false
       },
       {
-        "command": "/attendance",
+        "command": "/hrms-attendance",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Clock in, clock out, or today's punches",
         "usage_hint": "in | out | today",
         "should_escape": false
       },
       {
-        "command": "/approvals",
+        "command": "/hrms-approvals",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Requests waiting on your decision",
         "should_escape": false
       },
       {
-        "command": "/whosout",
+        "command": "/hrms-whosout",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Who is on leave today",
         "should_escape": false
       },
       {
-        "command": "/regularize",
+        "command": "/hrms-regularize",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "Your regularization allowance and flagged days",
         "should_escape": false
       },
       {
-        "command": "/hrdash",
+        "command": "/hrms-dash",
         "url": "https://orgfarm-7f6d730097-dev-ed.develop.my.salesforce-sites.com/slack/services/apexrest/slack/commands",
         "description": "HR dashboard: headcount, leave and attendance",
         "should_escape": false

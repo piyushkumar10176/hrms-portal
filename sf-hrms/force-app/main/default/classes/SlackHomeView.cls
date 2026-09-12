@@ -9,7 +9,7 @@
  * is waiting on them, HR and admin add the company. Nobody is shown a section
  * they have no business seeing.
  */
-public with sharing class SlackHomeView {
+public inherited sharing class SlackHomeView {
 
     /** Builds the whole view for one person. */
     public static List<Object> build(Employee__c employee) {
@@ -27,7 +27,7 @@ public with sharing class SlackHomeView {
         blocks.addAll(companySection(employee));
         blocks.add(SlackBlocks.divider());
         blocks.add(SlackBlocks.context(new List<String>{
-            'Commands still work: `/myleave`  `/attendance`  `/approvals`  `/whosout`  `/regularize`',
+            'Commands: `/hrms-leave`  `/hrms-attendance`  `/hrms-approvals`  `/hrms-whosout`  `/hrms-regularize`',
             '_Served by Salesforce directly. Refreshes each time you open this tab._'
         }));
 
@@ -121,7 +121,7 @@ public with sharing class SlackHomeView {
         }
         blocks.add(SlackBlocks.fields(labels, values));
         blocks.add(SlackBlocks.context(
-            'Use `/myleave` for the full picture. Applying from here arrives with the next release.'
+            'Use `/hrms-leave` for the full picture. Applying from here arrives with the next release.'
         ));
         return blocks;
     }

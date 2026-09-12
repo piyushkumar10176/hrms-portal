@@ -14,7 +14,7 @@
  * Nothing here throws: a Slack failure must never take down the work that
  * triggered it.
  */
-public with sharing class SlackApi {
+public inherited sharing class SlackApi {
 
     private static final String BASE = 'https://slack.com/api/';
     private static final Integer TIMEOUT_MS = 20000;

@@ -6,7 +6,7 @@
  * between them. Nothing here calculates anything itself, so Slack and every
  * other surface always agree.
  */
-public with sharing class SlackAttendanceCommand {
+public inherited sharing class SlackAttendanceCommand {
 
     private static final String CHECK_IN = 'Check-In';
     private static final String CHECK_OUT = 'Check-Out';

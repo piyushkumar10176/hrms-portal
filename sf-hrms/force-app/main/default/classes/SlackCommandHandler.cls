@@ -9,11 +9,12 @@
  * Anything that can be answered from memory is answered inline instead, because
  * a reply that arrives instantly reads better than one that arrives twice.
  */
-public with sharing class SlackCommandHandler {
+public inherited sharing class SlackCommandHandler {
 
     /** Commands the gateway knows. Anything else gets the help text. */
     private static final Set<String> KNOWN = new Set<String>{
-        '/myleave', '/attendance', '/approvals', '/whosout', '/regularize', '/hrdash'
+        '/hrms-leave', '/hrms-attendance', '/hrms-approvals',
+        '/hrms-whosout', '/hrms-regularize', '/hrms-dash'
     };
 
     public static void handle(RestResponse response, Map<String, String> form, Long startedAt) {
@@ -24,8 +25,8 @@ public with sharing class SlackCommandHandler {
 
         if (!KNOWN.contains(command)) {
             reply(response, SlackBlocks.ephemeral(
-                'That command is not one I know. Try `/myleave`, `/attendance`, ' +
-                '`/approvals`, `/whosout` or `/regularize`.'
+                'That command is not one I know. Try `/hrms-leave`, `/hrms-attendance`, ' +
+                '`/hrms-approvals`, `/hrms-whosout` or `/hrms-regularize`.'
             ));
             return;
         }

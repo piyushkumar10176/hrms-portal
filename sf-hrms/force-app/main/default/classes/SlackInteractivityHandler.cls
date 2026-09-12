@@ -7,7 +7,7 @@
  * to a Queueable, because Apex cannot call out after DML in the same
  * transaction and the message has to be rewritten once the record has changed.
  */
-public with sharing class SlackInteractivityHandler {
+public inherited sharing class SlackInteractivityHandler {
 
     public static void handle(RestResponse response, String raw) {
         if (String.isBlank(raw)) {

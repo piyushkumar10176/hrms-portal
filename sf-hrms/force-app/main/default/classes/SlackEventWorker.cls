@@ -5,7 +5,19 @@
  * their employee record by email, which is otherwise a manual step nobody
  * remembers until somebody reports receiving nothing.
  */
-public with sharing class SlackEventWorker implements Queueable, Database.AllowsCallouts {
+/**
+ * SHARING NOTE
+ *
+ * This runs as the Salesforce Site guest user, which has no identity of its own.
+ * Salesforce forces guest users to private record access whatever the org-wide
+ * default says, so "with sharing" here means seeing nothing at all, and the Home
+ * tab renders as if nobody is linked.
+ *
+ * Identity comes from the signed Slack payload, and every authorisation decision
+ * is made explicitly against the employee it names. Record sharing for the guest
+ * is therefore meaningless rather than protective.
+ */
+public without sharing class SlackEventWorker implements Queueable, Database.AllowsCallouts {
 
     private final String payload;
 

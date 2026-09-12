@@ -80,7 +80,7 @@ private class SlackGatewayRestTest {
     static void shouldRefuseEverythingWhileTheGatewayIsOff() {
         // Deploying the class must not by itself open a public door.
         buildFormRequest('commands', new Map<String, String>{
-            'token' => VERIFY_TOKEN, 'command' => '/myleave', 'user_id' => 'U0TEST0001'
+            'token' => VERIFY_TOKEN, 'command' => '/hrms-leave', 'user_id' => 'U0TEST0001'
         });
 
         Test.startTest();
@@ -96,7 +96,7 @@ private class SlackGatewayRestTest {
         enableGateway();
         // No token at all, which is what an outsider guessing the URL would send.
         buildFormRequest('commands', new Map<String, String>{
-            'command' => '/myleave', 'user_id' => 'U0TEST0001'
+            'command' => '/hrms-leave', 'user_id' => 'U0TEST0001'
         });
 
         Test.startTest();
@@ -111,7 +111,7 @@ private class SlackGatewayRestTest {
     static void shouldRefuseATamperedBody() {
         enableGateway();
         buildFormRequest('commands', new Map<String, String>{
-            'token' => 'somebody-elses-token', 'command' => '/myleave', 'user_id' => 'U0TEST0001'
+            'token' => 'somebody-elses-token', 'command' => '/hrms-leave', 'user_id' => 'U0TEST0001'
         });
 
         Test.startTest();
@@ -141,7 +141,7 @@ private class SlackGatewayRestTest {
         // answer arrives afterwards on the response_url.
         enableGateway();
         buildFormRequest('commands', new Map<String, String>{
-            'token' => VERIFY_TOKEN, 'command' => '/myleave', 'user_id' => 'U0TEST0001',
+            'token' => VERIFY_TOKEN, 'command' => '/hrms-leave', 'user_id' => 'U0TEST0001',
             'text' => '', 'response_url' => 'https://example.test/hook'
         });
 
@@ -220,10 +220,10 @@ private class SlackGatewayRestTest {
 
         Test.startTest();
         System.enqueueJob(new SlackAsyncWorker(
-            '/myleave', '', 'U0TEST0001', 'https://example.test/hook'
+            '/hrms-leave', '', 'U0TEST0001', 'https://example.test/hook'
         ));
         System.enqueueJob(new SlackAsyncWorker(
-            '/myleave', '', 'U0NOTLINKED', 'https://example.test/hook'
+            '/hrms-leave', '', 'U0NOTLINKED', 'https://example.test/hook'
         ));
         Test.stopTest();
 

@@ -6,7 +6,7 @@
  * and nobody may decide their own request. That last rule has no exception,
  * including for HR.
  */
-public with sharing class SlackApprovalsCommand {
+public inherited sharing class SlackApprovalsCommand {
 
     /** `/approvals`: everything waiting on this person. */
     public static String pending(Employee__c employee) {

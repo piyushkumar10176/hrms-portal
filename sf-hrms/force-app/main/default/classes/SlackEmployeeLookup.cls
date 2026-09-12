@@ -5,7 +5,7 @@
  * against the guest user the request arrived as. The guest owns nothing and can
  * see nothing; identity comes entirely from the signed Slack payload.
  */
-public with sharing class SlackEmployeeLookup {
+public inherited sharing class SlackEmployeeLookup {
 
     private static final Map<String, Employee__c> CACHE = new Map<String, Employee__c>();
 
