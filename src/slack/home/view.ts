@@ -158,9 +158,11 @@ function adminSection(data: HomeData): Block[] {
       ["On leave", String(c.onLeave)],
       ["Flagged days this month", String(c.flaggedThisMonth)],
     ]),
-    context(
-      "Company-wide employee search, onboarding and attendance correction arrive " +
-      "in the next release. Until then they are on the web portal."
+    actions(
+      button({ text: "Find an employee", actionId: "admin_find_employee", style: "primary" }),
+      button({ text: "Add an employee", actionId: "admin_add_employee" }),
+      button({ text: "Attendance", actionId: "admin_attendance" }),
+      button({ text: "Who is in today", actionId: "admin_today_attendance" })
     ),
   ];
 }

@@ -26,6 +26,7 @@ import { countWorkingDays, SHIFT_START, SHIFT_END, SHIFT_MIDPOINT, type HalfDayS
 import { availableDays } from "@/lib/leave-balance";
 import { businessToday } from "@/lib/business-time";
 import { handleHomeAction } from "@/slack/actions/home";
+import { handleAdminAction, handleAdminSubmission } from "@/slack/actions/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -83,6 +84,7 @@ interface SlackInteraction {
   message?: { blocks?: SlackBlock[] };
   view?: {
     callback_id?: string;
+    private_metadata?: string;
     state?: {
       values: Record<
         string,
@@ -116,6 +118,14 @@ async function handleAction(payload: SlackInteraction): Promise<void> {
     // Home tab buttons first. They carry no response_url, so anything below
     // that replies through one would fail silently for them.
     if (await handleHomeAction(action.action_id, actor, slackUserId)) {
+      return;
+    }
+
+    // Admin buttons. These open modals, so they need the trigger_id, which is
+    // single use and lives about three seconds.
+    if (await handleAdminAction(
+      action.action_id, action.value, payload.trigger_id ?? "", actor, slackUserId
+    )) {
       return;
     }
 
@@ -449,6 +459,30 @@ async function openRegularizeModal(
  * response_action errors so they appear against the offending field.
  */
 async function handleViewSubmission(payload: SlackInteraction): Promise<NextResponse> {
+  // Admin submissions first. Returns null for anything it does not own, so the
+  // leave and regularization flows below are reached unchanged.
+  const callbackId = payload.view?.callback_id ?? "";
+  if (callbackId.startsWith("admin_")) {
+    const slackUserId = payload.user?.id ?? "";
+    const actor = await employeeForSlackUser(slackUserId);
+    if (!actor) {
+      return NextResponse.json({
+        response_action: "errors",
+        errors: { term: "Your Slack account is not linked to an employee." },
+      });
+    }
+    const outcome = await handleAdminSubmission(
+      callbackId,
+      payload.view?.state,
+      payload.view?.private_metadata,
+      actor,
+      slackUserId
+    );
+    if (outcome !== null) {
+      return NextResponse.json(outcome);
+    }
+  }
+
   if (payload.view?.callback_id === "regularize_apply") {
     return handleRegularizeSubmission(payload);
   }
