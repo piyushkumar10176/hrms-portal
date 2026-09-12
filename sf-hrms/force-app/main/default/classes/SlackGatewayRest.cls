@@ -42,12 +42,25 @@ global without sharing class SlackGatewayRest {
                 ? null
                 : request.requestBody.toString();
 
-            SlackRequestVerifier.Verdict verdict = SlackRequestVerifier.verify(
-                rawBody,
-                header(request, 'X-Slack-Signature'),
-                header(request, 'X-Slack-Request-Timestamp'),
-                config.Signing_Secret__c
-            );
+            // Which proof applies is decided by what survived the request.
+            //
+            // Apex REST consumes a form body into params and leaves requestBody
+            // empty, so a signature has nothing to verify against. Events arrive
+            // as JSON and keep theirs. Rather than pick by content type, which a
+            // caller controls, this picks by what is actually present.
+            Boolean bodySurvived = String.isNotBlank(rawBody);
+
+            SlackRequestVerifier.Verdict verdict = bodySurvived
+                ? SlackRequestVerifier.verify(
+                      rawBody,
+                      header(request, 'X-Slack-Signature'),
+                      header(request, 'X-Slack-Request-Timestamp'),
+                      config.Signing_Secret__c
+                  )
+                : SlackRequestVerifier.verifyToken(
+                      request.params?.get('token'),
+                      config.Verification_Token__c
+                  );
 
             if (!verdict.ok) {
                 System.debug(LoggingLevel.WARN, 'Slack request refused: ' + verdict.reason);
@@ -55,7 +68,7 @@ global without sharing class SlackGatewayRest {
                 return;
             }
 
-            route(request, response, rawBody, startedAt);
+            route(request, response, rawBody, request.params, startedAt);
 
         } catch (Exception e) {
             // A 500 makes Slack retry, which would repeat whatever half happened.
@@ -71,7 +84,8 @@ global without sharing class SlackGatewayRest {
 
     /** Sends the request to the right handler based on the path Slack called. */
     private static void route(
-        RestRequest request, RestResponse response, String rawBody, Long startedAt
+        RestRequest request, RestResponse response, String rawBody,
+        Map<String, String> params, Long startedAt
     ) {
         String path = request.requestURI == null ? '' : request.requestURI.toLowerCase();
 
@@ -80,11 +94,13 @@ global without sharing class SlackGatewayRest {
             return;
         }
         if (path.endsWith('/interactivity')) {
-            SlackInteractivityHandler.handle(response, rawBody);
+            // The payload is a form field, so it comes from params rather than
+            // from a body that no longer exists.
+            SlackInteractivityHandler.handle(response, params?.get('payload'));
             return;
         }
         if (path.endsWith('/commands')) {
-            SlackCommandHandler.handle(response, SlackRequestVerifier.parseForm(rawBody), startedAt);
+            SlackCommandHandler.handle(response, params, startedAt);
             return;
         }
         reply(response, 404, '{"error":"unknown_endpoint"}');

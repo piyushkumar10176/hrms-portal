@@ -15,6 +15,23 @@
  *   wire cannot be replayed later.
  *
  * Verified against Slack's own published test vector in SlackRequestVerifierTest.
+ *
+ * Signatures cannot be used everywhere, though. Apex REST consumes the body of
+ * an application/x-www-form-urlencoded POST into params and leaves requestBody
+ * empty, and Slack sends slash commands and interactivity that way. There is
+ * then nothing left to compute a digest over, and rebuilding the body from
+ * params does not work: the decoding is lossy on plus versus %20 and a Map does
+ * not preserve the field order the signature was taken over.
+ *
+ * So there are two checks, and which applies is decided by what survived:
+ *
+ *   Events arrive as JSON, keep their body, and are verified by signature.
+ *   Commands and interactivity arrive as a form and are verified by the
+ *   verification token Slack includes in every such payload.
+ *
+ * The token is a weaker proof. It travels in the request rather than being a
+ * digest of it, so it carries no replay protection. It is what Slack itself used
+ * before signing existed and remains the only option on this path.
  */
 public with sharing class SlackRequestVerifier {
 
@@ -121,6 +138,26 @@ public with sharing class SlackRequestVerifier {
             difference |= (a.charAt(i) ^ b.charAt(i));
         }
         return difference == 0;
+    }
+
+    /**
+     * Checks the verification token Slack puts in a form payload.
+     *
+     * Used where a signature cannot be: the body is gone by the time Apex sees
+     * it, so this is what is left. Compared in constant time for the same reason
+     * the signature is.
+     *
+     * @param provided the token field from the request
+     * @param expected the token configured against this org
+     */
+    public static Verdict verifyToken(String provided, String expected) {
+        if (String.isBlank(expected)) {
+            return fail('no_verification_token_configured');
+        }
+        if (String.isBlank(provided)) {
+            return fail('missing_verification_token');
+        }
+        return constantTimeEquals(expected, provided) ? pass() : fail('token_mismatch');
     }
 
     /**

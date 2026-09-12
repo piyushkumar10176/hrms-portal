@@ -9,9 +9,7 @@
  */
 public with sharing class SlackInteractivityHandler {
 
-    public static void handle(RestResponse response, String rawBody) {
-        Map<String, String> form = SlackRequestVerifier.parseForm(rawBody);
-        String raw = form.get('payload');
+    public static void handle(RestResponse response, String raw) {
         if (String.isBlank(raw)) {
             reply(response, 400, '{"error":"no_payload"}');
             return;

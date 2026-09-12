@@ -70,7 +70,7 @@ public with sharing class SlackLeaveCommand {
             return SlackBlocks.ephemeral(':white_check_mark: Everybody is in today.');
         }
 
-        List<Object> blocks = new List<Object>{ SlackBlocks.header('Out today · ' + today) };
+        List<Object> blocks = new List<Object>{ SlackBlocks.header('Out today · ' + SlackBlocks.dateText(today)) };
         if (!away.isEmpty()) {
             blocks.add(SlackBlocks.section(':palm_tree: *Away*\n' + String.join(away, ', ')));
         }

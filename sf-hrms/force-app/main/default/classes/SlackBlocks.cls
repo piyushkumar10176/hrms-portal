@@ -189,6 +189,19 @@ public with sharing class SlackBlocks {
         return String.join(padded, '  ').replaceAll('\\s+$', '');
     }
 
+    /**
+     * A date as yyyy-MM-dd.
+     *
+     * Concatenating a Date with a String in Apex yields "2026-09-12 00:00:00",
+     * which shows the reader a midnight that means nothing.
+     */
+    public static String dateText(Date value) {
+        if (value == null) {
+            return '';
+        }
+        return DateTime.newInstance(value, Time.newInstance(0, 0, 0, 0)).format('yyyy-MM-dd');
+    }
+
     /** An ephemeral reply only the person who typed the command sees. */
     public static String ephemeral(String text) {
         return JSON.serialize(new Map<String, Object>{

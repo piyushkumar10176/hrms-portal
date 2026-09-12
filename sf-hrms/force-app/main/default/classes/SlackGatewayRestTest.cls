@@ -9,6 +9,7 @@
 private class SlackGatewayRestTest {
 
     private static final String SECRET = 'test-signing-secret-value';
+    private static final String VERIFY_TOKEN = 'test-verification-token-value';
 
     @TestSetup
     static void setupTestData() {
@@ -26,12 +27,16 @@ private class SlackGatewayRestTest {
         insert new Slack_Config__c(
             SetupOwnerId = UserInfo.getOrganizationId(),
             Signing_Secret__c = SECRET,
+            Verification_Token__c = VERIFY_TOKEN,
             Gateway_Enabled__c = true
         );
     }
 
-    /** Builds a request signed the way Slack signs one. */
-    private static void buildRequest(String path, String body) {
+    /**
+     * A JSON request, which keeps its body and is verified by signature. This is
+     * how the events endpoint arrives.
+     */
+    private static void buildJsonRequest(String path, String body) {
         String timestamp = String.valueOf(SlackRequestVerifier.nowEpochSeconds());
         Blob mac = Crypto.generateMac(
             'hmacSHA256', Blob.valueOf('v0:' + timestamp + ':' + body), Blob.valueOf(SECRET)
@@ -48,6 +53,25 @@ private class SlackGatewayRestTest {
         RestContext.response = new RestResponse();
     }
 
+    /**
+     * A form request as Apex REST actually delivers one: the body consumed into
+     * params and requestBody left empty. Reproducing that here is the whole
+     * point, because a test that sets a body would exercise a path production
+     * never takes.
+     */
+    private static void buildFormRequest(String path, Map<String, String> fields) {
+        RestRequest request = new RestRequest();
+        request.requestURI = '/services/apexrest/slack/' + path;
+        request.httpMethod = 'POST';
+        request.requestBody = Blob.valueOf('');
+        request.headers.put('Content-Type', 'application/x-www-form-urlencoded');
+        for (String key : fields.keySet()) {
+            request.params.put(key, fields.get(key));
+        }
+        RestContext.request = request;
+        RestContext.response = new RestResponse();
+    }
+
     private static String responseBody() {
         return RestContext.response.responseBody.toString();
     }
@@ -55,7 +79,9 @@ private class SlackGatewayRestTest {
     @isTest
     static void shouldRefuseEverythingWhileTheGatewayIsOff() {
         // Deploying the class must not by itself open a public door.
-        buildRequest('commands', 'command=%2Fmyleave&user_id=U0TEST0001&response_url=https%3A%2F%2Fexample.test');
+        buildFormRequest('commands', new Map<String, String>{
+            'token' => VERIFY_TOKEN, 'command' => '/myleave', 'user_id' => 'U0TEST0001'
+        });
 
         Test.startTest();
         SlackGatewayRest.handle();
@@ -68,40 +94,38 @@ private class SlackGatewayRestTest {
     @isTest
     static void shouldRefuseAnUnsignedRequest() {
         enableGateway();
-        RestRequest request = new RestRequest();
-        request.requestURI = '/services/apexrest/slack/commands';
-        request.httpMethod = 'POST';
-        request.requestBody = Blob.valueOf('command=%2Fmyleave');
-        RestContext.request = request;
-        RestContext.response = new RestResponse();
+        // No token at all, which is what an outsider guessing the URL would send.
+        buildFormRequest('commands', new Map<String, String>{
+            'command' => '/myleave', 'user_id' => 'U0TEST0001'
+        });
 
         Test.startTest();
         SlackGatewayRest.handle();
         Test.stopTest();
 
         Assert.areEqual(401, RestContext.response.statusCode,
-            'Anybody on the internet can reach this, so an unsigned request must be refused');
+            'Anybody on the internet can reach this, so an unverified request must be refused');
     }
 
     @isTest
     static void shouldRefuseATamperedBody() {
         enableGateway();
-        buildRequest('commands', 'command=%2Fmyleave&user_id=U0TEST0001');
-        // Change the body after it was signed, as an attacker would.
-        RestContext.request.requestBody = Blob.valueOf('command=%2Fhrdash&user_id=U0TEST0001');
+        buildFormRequest('commands', new Map<String, String>{
+            'token' => 'somebody-elses-token', 'command' => '/myleave', 'user_id' => 'U0TEST0001'
+        });
 
         Test.startTest();
         SlackGatewayRest.handle();
         Test.stopTest();
 
-        Assert.areEqual(401, RestContext.response.statusCode, 'A changed body must not verify');
+        Assert.areEqual(401, RestContext.response.statusCode, 'A wrong token must not verify');
     }
 
     @isTest
     static void shouldEchoTheChallenge_WhenSlackVerifiesTheUrl() {
         // Slack proves it owns the URL before delivering any event.
         enableGateway();
-        buildRequest('events', '{"type":"url_verification","challenge":"abc123xyz"}');
+        buildJsonRequest('events', '{"type":"url_verification","challenge":"abc123xyz"}');
 
         Test.startTest();
         SlackGatewayRest.handle();
@@ -116,8 +140,10 @@ private class SlackGatewayRestTest {
         // The acknowledgement is what stops Slack showing a timeout. The real
         // answer arrives afterwards on the response_url.
         enableGateway();
-        buildRequest('commands',
-            'command=%2Fmyleave&user_id=U0TEST0001&text=&response_url=https%3A%2F%2Fexample.test%2Fhook');
+        buildFormRequest('commands', new Map<String, String>{
+            'token' => VERIFY_TOKEN, 'command' => '/myleave', 'user_id' => 'U0TEST0001',
+            'text' => '', 'response_url' => 'https://example.test/hook'
+        });
 
         Test.startTest();
         SlackGatewayRest.handle();
@@ -132,8 +158,10 @@ private class SlackGatewayRestTest {
     @isTest
     static void shouldNotQueueWorkForAnUnknownCommand() {
         enableGateway();
-        buildRequest('commands',
-            'command=%2Fnotacommand&user_id=U0TEST0001&response_url=https%3A%2F%2Fexample.test');
+        buildFormRequest('commands', new Map<String, String>{
+            'token' => VERIFY_TOKEN, 'command' => '/notacommand', 'user_id' => 'U0TEST0001',
+            'response_url' => 'https://example.test'
+        });
 
         Test.startTest();
         SlackGatewayRest.handle();
@@ -147,7 +175,7 @@ private class SlackGatewayRestTest {
     @isTest
     static void shouldAnswerAnUnknownPathWith404() {
         enableGateway();
-        buildRequest('nonsense', '{}');
+        buildJsonRequest('nonsense', '{}');
 
         Test.startTest();
         SlackGatewayRest.handle();
@@ -258,10 +286,10 @@ private class SlackGatewayRestTest {
     @isTest
     static void shouldCloseAModalOnSubmission() {
         enableGateway();
-        String payload = EncodingUtil.urlEncode(
-            JSON.serialize(new Map<String, Object>{ 'type' => 'view_submission' }), 'UTF-8'
-        );
-        buildRequest('interactivity', 'payload=' + payload);
+        buildFormRequest('interactivity', new Map<String, String>{
+            'token' => VERIFY_TOKEN,
+            'payload' => JSON.serialize(new Map<String, Object>{ 'type' => 'view_submission' })
+        });
 
         Test.startTest();
         SlackGatewayRest.handle();

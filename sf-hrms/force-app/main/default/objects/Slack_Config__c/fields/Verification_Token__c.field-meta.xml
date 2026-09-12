@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Verification_Token__c</fullName>
+    <label>Slack Verification Token</label>
+    <description>From Basic Information in the Slack app. Used to prove a slash command or button really came from Slack, because Apex REST empties the body of a form post and the signature has nothing left to verify against. Events arrive as JSON, keep their body, and are still checked by signature.</description>
+    <inlineHelpText>Slack app, Basic Information, App Credentials, Verification Token.</inlineHelpText>
+    <type>Text</type>
+    <length>255</length>
+    <required>false</required>
+</CustomField>

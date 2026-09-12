@@ -52,11 +52,21 @@ public with sharing class SlackAsyncWorker implements Queueable, Database.Allows
         if (command == '/whosout') {
             return SlackLeaveCommand.whoIsOut();
         }
-        // Ported one at a time. Saying so plainly beats a command that appears
-        // broken, and beats one that silently does nothing.
+        if (command == '/attendance') {
+            return SlackAttendanceCommand.run(employee, argument);
+        }
+        if (command == '/approvals') {
+            return SlackApprovalsCommand.pending(employee);
+        }
+        if (command == '/hrdash') {
+            return SlackApprovalsCommand.dashboard(employee);
+        }
+        if (command == '/regularize') {
+            return SlackApprovalsCommand.regularize(employee);
+        }
         return SlackBlocks.ephemeral(
-            command + ' has not been moved to the Salesforce gateway yet. ' +
-            'It still works on the original Slack app.'
+            'That command is not one I know. Try `/myleave`, `/attendance`, ' +
+            '`/approvals`, `/whosout`, `/regularize` or `/hrdash`.'
         );
     }
 
