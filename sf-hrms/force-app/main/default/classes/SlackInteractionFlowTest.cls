@@ -633,6 +633,244 @@ private class SlackInteractionFlowTest {
         );
     }
 
+    // ---- the rollup under the guest --------------------------------------
+
+    @isTest
+    static void shouldDeriveTheWholeDayFromAClockOutPressedInSlack() {
+        // The fault this was written for: the rollup was "with sharing", so run
+        // as the Site guest user it queried the punches and found none, then
+        // wrote a day derived from nothing. The clock-in appeared and the hours,
+        // break and clock-out never did.
+        SlackHttpMock mock = mockSlack();
+        Employee__c actor = staffMember();
+        Date today = AttendanceRollupService.businessDateOf(System.now());
+        insert new List<Attendance_Punch__c>{
+            TestDataFactory.buildPunch(actor, TestDataFactory.istInstant(today, 10, 0), 'Check-In'),
+            TestDataFactory.buildPunch(actor, TestDataFactory.istInstant(today, 10, 30), 'Check-Out'),
+            TestDataFactory.buildPunch(actor, TestDataFactory.istInstant(today, 11, 15), 'Check-In')
+        };
+        prepareResponse();
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(
+            RestContext.response, buttonPayload('home_clock_out', 'out', STAFF_SLACK_ID)
+        );
+        Test.stopTest();
+
+        Attendance__c day = [
+            SELECT Check_In__c, Check_Out__c, Gross_Hours__c, Break_Minutes__c, Total_Hours__c
+            FROM Attendance__c WHERE Employee__c = :actor.Id AND Date__c = :today
+        ];
+        Assert.isNotNull(day.Check_Out__c, 'The clock-out has to reach the derived day');
+        Assert.areEqual(45, day.Break_Minutes__c,
+            'Out at 10:30 and back at 11:15 is 45 minutes of break');
+        Assert.isNotNull(day.Gross_Hours__c, 'Time on premises should be derived');
+        Assert.isNotNull(day.Total_Hours__c, 'And the effective hours with it');
+        Assert.isTrue(day.Total_Hours__c < day.Gross_Hours__c,
+            'Worked is on premises less the break, so it must be the smaller number');
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', 'Clocked out'),
+            'And the confirmation carries the totals: ' + mock.allSaidTo('chat.postMessage')
+        );
+    }
+
+    @isTest
+    static void shouldKeepTheAvailedBalanceWhenLeaveIsDecidedFromSlack() {
+        // Same fault, worse consequence: the balance recalculation aggregates
+        // over Leave_Request__c, so an empty view set Availed__c to zero and
+        // quietly handed everybody their leave back.
+        mockSlack();
+        prepareResponse();
+        Employee__c approver =
+            [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = :ADMIN_SLACK_ID];
+        Leave_Request__c request = new Leave_Request__c(
+            Employee__c = staffMember().Id,
+            Approver__c = approver.Id,
+            Leave_Type__c = [SELECT Id FROM Leave_Type__c LIMIT 1].Id,
+            From_Date__c = nextMonday(),
+            To_Date__c = nextMonday().addDays(1),
+            Days__c = 2,
+            Status__c = 'Submitted'
+        );
+        insert request;
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(RestContext.response, JSON.serialize(
+            new Map<String, Object>{
+                'type' => 'block_actions',
+                'user' => new Map<String, Object>{ 'id' => ADMIN_SLACK_ID },
+                'response_url' => 'https://hooks.slack.test/replace',
+                'actions' => new List<Object>{
+                    new Map<String, Object>{ 'action_id' => 'approve_leave', 'value' => request.Id }
+                }
+            }
+        ));
+        Test.stopTest();
+
+        Leave_Balance__c balance = [
+            SELECT Availed__c, Closing_Balance__c FROM Leave_Balance__c
+            WHERE Employee__c = :staffMember().Id LIMIT 1
+        ];
+        Assert.areEqual(2, balance.Availed__c,
+            'Two approved days have to count against the balance, not vanish');
+        Assert.areEqual(10, balance.Closing_Balance__c,
+            'Twelve accrued less two availed is ten');
+    }
+
+    @isTest
+    static void shouldNameWhoDecidedWhenTellingTheRequester() {
+        SlackHttpMock mock = mockSlack();
+        prepareResponse();
+        Employee__c approver = [
+            SELECT Id, Name FROM Employee__c WHERE Slack_User_Id__c = :ADMIN_SLACK_ID
+        ];
+        Leave_Request__c request = new Leave_Request__c(
+            Employee__c = staffMember().Id,
+            Approver__c = approver.Id,
+            Leave_Type__c = [SELECT Id FROM Leave_Type__c LIMIT 1].Id,
+            From_Date__c = nextMonday(), To_Date__c = nextMonday(),
+            Days__c = 1, Status__c = 'Submitted'
+        );
+        insert request;
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(RestContext.response, JSON.serialize(
+            new Map<String, Object>{
+                'type' => 'block_actions',
+                'user' => new Map<String, Object>{ 'id' => ADMIN_SLACK_ID },
+                'response_url' => 'https://hooks.slack.test/replace',
+                'actions' => new List<Object>{
+                    new Map<String, Object>{ 'action_id' => 'approve_leave', 'value' => request.Id }
+                }
+            }
+        ));
+        Test.stopTest();
+
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', approver.Name),
+            '"Your leave was decided" with nobody attached sends people asking around: ' +
+                mock.allSaidTo('chat.postMessage')
+        );
+    }
+
+    // ---- linking everybody at once ---------------------------------------
+
+    @isTest
+    static void shouldLinkEveryUnlinkedEmployeeWhoseEmailSlackKnows() {
+        SlackHttpMock mock = new SlackHttpMock('U0FOUND001');
+        Test.setMock(HttpCalloutMock.class, mock);
+        prepareResponse();
+        Employee__c stranger = TestDataFactory.createEmployees(1, false)[0];
+        stranger.Name = 'Unlinked Person';
+        stranger.Employee_Code__c = 'UNL001';
+        stranger.Official_Email__c = 'unlinked.person@cloudsheer.test';
+        insert stranger;
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(
+            RestContext.response, buttonPayload('hrms_link_everyone', 'all', ADMIN_SLACK_ID)
+        );
+        Test.stopTest();
+
+        Assert.areEqual('U0FOUND001',
+            [SELECT Slack_User_Id__c FROM Employee__c WHERE Id = :stranger.Id].Slack_User_Id__c,
+            'Onboarding twenty-six people one at a time is nobody\'s afternoon');
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', 'Unlinked Person'),
+            'And the administrator is told who was linked: ' +
+                mock.allSaidTo('chat.postMessage')
+        );
+    }
+
+    @isTest
+    static void shouldRefuseLinkingEverybodyToAnybodyButAnAdministrator() {
+        SlackHttpMock mock = new SlackHttpMock('U0FOUND001');
+        Test.setMock(HttpCalloutMock.class, mock);
+        prepareResponse();
+        Employee__c stranger = TestDataFactory.createEmployees(1, false)[0];
+        stranger.Employee_Code__c = 'UNL002';
+        stranger.Official_Email__c = 'someone.else@cloudsheer.test';
+        insert stranger;
+
+        Test.startTest();
+        SlackInteractivityHandler.handle(
+            RestContext.response, buttonPayload('hrms_link_everyone', 'all', STAFF_SLACK_ID)
+        );
+        Test.stopTest();
+
+        Assert.isNull(
+            [SELECT Slack_User_Id__c FROM Employee__c WHERE Id = :stranger.Id].Slack_User_Id__c,
+            'Who receives company messages is an administrator\'s decision'
+        );
+        Assert.isTrue(mock.saidInAny('chat.postMessage', 'Only an administrator'),
+            'And they are told why');
+    }
+
+    // ---- the morning digest ----------------------------------------------
+
+    @isTest
+    static void shouldPostTheDigestNamingWhoIsAwayAndWhoIsRemote() {
+        SlackHttpMock mock = mockSlack();
+        Slack_Config__c config = Slack_Config__c.getOrgDefaults();
+        config.Digest_Channel_Id__c = 'C0DIGEST01';
+        update config;
+        Leave_Type__c wfh = TestDataFactory.createLeaveType('Work From Home', 0, true);
+        Date today = AttendanceRollupService.businessDateOf(System.now());
+        insert new List<Leave_Request__c>{
+            new Leave_Request__c(
+                Employee__c = staffMember().Id,
+                Leave_Type__c = [SELECT Id FROM Leave_Type__c WHERE Name = 'Annual Leave' LIMIT 1].Id,
+                From_Date__c = today, To_Date__c = today, Days__c = 1, Status__c = 'Approved'
+            ),
+            new Leave_Request__c(
+                Employee__c = [SELECT Id FROM Employee__c WHERE Slack_User_Id__c = :ADMIN_SLACK_ID].Id,
+                Leave_Type__c = wfh.Id,
+                From_Date__c = today, To_Date__c = today, Days__c = 1, Status__c = 'Approved'
+            )
+        };
+
+        Test.startTest();
+        Boolean sent = SlackDailyDigest.send();
+        Test.stopTest();
+
+        Assert.isTrue(sent, 'A configured channel means the digest goes out');
+        String posted = mock.bodyOf('chat.postMessage');
+        Assert.isTrue(posted.contains('C0DIGEST01'), 'To the configured channel');
+        Assert.isTrue(posted.contains('Away'), 'Somebody on leave is away: ' + posted);
+        Assert.isTrue(posted.contains('Working remotely'),
+            'Work from home is leave in the data model but it is not absence');
+    }
+
+    @isTest
+    static void shouldSendNoDigestWhenNoChannelIsConfigured() {
+        SlackHttpMock mock = mockSlack();
+
+        Test.startTest();
+        Boolean sent = SlackDailyDigest.send();
+        Test.stopTest();
+
+        Assert.isFalse(sent, 'A blank channel is how this is switched off');
+        Assert.isFalse(mock.called('chat.postMessage'),
+            'And switched off means nothing is sent, not sent nowhere');
+    }
+
+    @isTest
+    static void shouldSayEverybodyIsInWhenNobodyIsOut() {
+        SlackHttpMock mock = mockSlack();
+        Slack_Config__c config = Slack_Config__c.getOrgDefaults();
+        config.Digest_Channel_Id__c = 'C0DIGEST01';
+        update config;
+
+        Test.startTest();
+        SlackDailyDigest.send();
+        Test.stopTest();
+
+        Assert.isTrue(
+            mock.saidInAny('chat.postMessage', 'Everybody is in today'),
+            'A quiet day still deserves a sentence rather than an empty post'
+        );
+    }
+
     // ---- what it refuses -------------------------------------------------
 
     @isTest

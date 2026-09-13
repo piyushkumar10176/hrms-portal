@@ -124,6 +124,23 @@ public inherited sharing class SlackApprovalsCommand {
                 ' not linked to a Slack account, so they receive nothing at all.'
             ));
         }
+
+        // The dashboard used to be a wall of numbers with nothing to press, so
+        // every answer it prompted meant going somewhere else to act on it.
+        List<Object> buttons = new List<Object>{
+            SlackBlocks.button('Find an employee', 'hrms_find_employee', 'find', null),
+            SlackBlocks.button('Attendance', 'hrms_pick_attendance', 'pick', null),
+            SlackBlocks.button('Everyone today', 'hrms_today_attendance', 'today', null)
+        };
+        if (SlackAuthz.canManageEmployees(employee)) {
+            buttons.add(SlackBlocks.button('Add an employee', 'hrms_add_employee', 'add', 'primary'));
+            if (unlinked > 0) {
+                buttons.add(SlackBlocks.button(
+                    'Link ' + unlinked + ' by email', 'hrms_link_everyone', 'all', null
+                ));
+            }
+        }
+        blocks.add(SlackBlocks.actions(buttons));
         blocks.add(SlackBlocks.context('Served by Salesforce directly.'));
 
         return SlackBlocks.ephemeral('HR dashboard', blocks);

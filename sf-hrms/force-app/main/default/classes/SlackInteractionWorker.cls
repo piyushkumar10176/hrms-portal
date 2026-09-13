@@ -34,6 +34,7 @@ public without sharing class SlackInteractionWorker implements Queueable, Databa
     public static final String PUNCH_LOG = 'punch_log';
     public static final String MY_REQUESTS = 'my_requests';
     public static final String LINK_SLACK = 'link_slack';
+    public static final String LINK_EVERYONE = 'link_everyone';
     public static final String CLOCKED = 'clocked';
 
     private final String kind;
@@ -93,6 +94,10 @@ public without sharing class SlackInteractionWorker implements Queueable, Databa
         }
         if (kind == LINK_SLACK) {
             linkByEmail(actor);
+            return;
+        }
+        if (kind == LINK_EVERYONE) {
+            linkEveryone(actor);
             return;
         }
         if (kind == PROFILE) {
@@ -198,6 +203,84 @@ public without sharing class SlackInteractionWorker implements Queueable, Databa
         );
         // Last, because nothing may call out after this.
         update new Employee__c(Id = subject.Id, Slack_User_Id__c = found);
+    }
+
+    /**
+     * Links every unlinked employee whose work email matches a workspace account.
+     *
+     * Onboarding twenty-six people one at a time is nobody's afternoon, and the
+     * Home tab has been reporting that number as a warning with nothing to press.
+     *
+     * Every lookup is a callout and Apex allows a hundred in a transaction, so
+     * the batch is bounded well inside that and the remainder is reported rather
+     * than silently dropped. The writes are collected and done once, at the end,
+     * because nothing may call out after the first of them.
+     */
+    private void linkEveryone(Employee__c actor) {
+        if (!SlackAuthz.canManageEmployees(actor)) {
+            SlackApi.postMessage(slackUserId, 'Only an administrator can link accounts.', null);
+            return;
+        }
+
+        List<Employee__c> candidates = [
+            SELECT Id, Name, Official_Email__c FROM Employee__c
+            WHERE Employee_Status__c = 'Active'
+              AND Slack_User_Id__c = NULL
+              AND Official_Email__c != NULL
+            ORDER BY Name
+            LIMIT 40
+        ];
+        Integer remaining = [
+            SELECT COUNT() FROM Employee__c
+            WHERE Employee_Status__c = 'Active' AND Slack_User_Id__c = NULL
+        ] - candidates.size();
+
+        List<Employee__c> linked = new List<Employee__c>();
+        List<String> names = new List<String>();
+        Integer notInWorkspace = 0;
+        Set<String> claimed = new Set<String>();
+
+        for (Employee__c employee : candidates) {
+            String found = SlackApi.lookupUserIdByEmail(employee.Official_Email__c);
+            if (String.isBlank(found) || claimed.contains(found)) {
+                // A blank is somebody who has not joined. A repeat would point
+                // two records at one account, which breaks the lookup for both.
+                notInWorkspace++;
+                continue;
+            }
+            claimed.add(found);
+            linked.add(new Employee__c(Id = employee.Id, Slack_User_Id__c = found));
+            names.add(employee.Name);
+        }
+
+        List<Object> blocks = new List<Object>{
+            SlackBlocks.header('Linking Slack accounts'),
+            SlackBlocks.section(
+                linked.isEmpty()
+                    ? 'Nobody could be matched. Nobody in this workspace uses any of those ' +
+                      'work email addresses, so they have either not joined yet or the ' +
+                      'addresses on their records are wrong.'
+                    : ':link: Linked *' + linked.size() + '* of ' + candidates.size() +
+                      '.\n' + SlackBlocks.escape(String.join(names, ', '))
+            )
+        };
+        if (notInWorkspace > 0 && !linked.isEmpty()) {
+            blocks.add(SlackBlocks.context(
+                notInWorkspace + ' could not be matched to a workspace account.'
+            ));
+        }
+        if (remaining > 0) {
+            blocks.add(SlackBlocks.context(
+                remaining + ' more have no email address on record, so there is nothing to ' +
+                'match them on. Add one and press the button again.'
+            ));
+        }
+        SlackApi.postMessage(slackUserId, 'Linking Slack accounts', blocks);
+
+        // Last, because nothing may call out after this.
+        if (!linked.isEmpty()) {
+            update linked;
+        }
     }
 
     private void post(List<Object> blocks, String fallbackText) {

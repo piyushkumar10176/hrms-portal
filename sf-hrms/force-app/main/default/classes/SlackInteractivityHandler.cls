@@ -210,6 +210,8 @@ public inherited sharing class SlackInteractivityHandler {
             enqueue(SlackInteractionWorker.TODAY, value, slackUserId, null, false);
         } else if (actionId == 'hrms_link_slack') {
             enqueue(SlackInteractionWorker.LINK_SLACK, value, slackUserId, null, true);
+        } else if (actionId == 'hrms_link_everyone') {
+            enqueue(SlackInteractionWorker.LINK_EVERYONE, value, slackUserId, null, true);
         } else if (actionId == 'home_view_punches') {
             enqueue(SlackInteractionWorker.PUNCH_LOG, value, slackUserId, null, false);
         } else if (actionId == 'home_my_requests') {

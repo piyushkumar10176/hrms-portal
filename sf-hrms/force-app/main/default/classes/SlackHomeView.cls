@@ -248,6 +248,7 @@ public inherited sharing class SlackHomeView {
                 }
             )
         };
+        Boolean admin = SlackAuthz.canManageEmployees(employee);
         if (unlinked > 0) {
             blocks.add(SlackBlocks.context(
                 ':warning: ' + unlinked + ' active ' + (unlinked == 1 ? 'employee receives' : 'employees receive') +
@@ -262,10 +263,21 @@ public inherited sharing class SlackHomeView {
             SlackBlocks.button('Attendance', 'hrms_pick_attendance', 'pick', null),
             SlackBlocks.button('Everyone today', 'hrms_today_attendance', 'today', null)
         };
-        if (SlackAuthz.canManageEmployees(employee)) {
+        if (admin) {
             buttons.add(SlackBlocks.button('Add an employee', 'hrms_add_employee', 'add', 'primary'));
         }
         blocks.add(SlackBlocks.actions(buttons));
+
+        // Stating a problem without offering the fix is what makes a warning
+        // something people stop reading. Linking everybody at once is the
+        // answer to the line above, so it sits next to it.
+        if (admin && unlinked > 0) {
+            blocks.add(SlackBlocks.actions(new List<Object>{
+                SlackBlocks.button(
+                    'Link ' + unlinked + ' by email', 'hrms_link_everyone', 'all', 'primary'
+                )
+            }));
+        }
         return blocks;
     }
 

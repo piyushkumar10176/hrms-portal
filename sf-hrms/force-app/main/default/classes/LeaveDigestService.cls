@@ -4,7 +4,13 @@
  * Kept separate from the scheduling and the callout so the message can be
  * asserted in a test without mocking either.
  */
-public with sharing class LeaveDigestService {
+/**
+ * SHARING NOTE
+ *
+ * Reports across the whole company for two unattended callers, so it follows
+ * whichever of them invoked it rather than imposing a reader's view on both.
+ */
+public inherited sharing class LeaveDigestService {
     /** One person's absence for the day. */
     public class Absence {
         public String employeeName;

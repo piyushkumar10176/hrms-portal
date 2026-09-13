@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Digest_Channel_Id__c</fullName>
+    <label>Digest Channel Id</label>
+    <description>Slack channel the morning who-is-out digest is posted to, for example C0BVCBYSEJV. Leave blank to send no digest from this app.</description>
+    <inlineHelpText>Channel id, not name. Blank means no digest is sent.</inlineHelpText>
+    <type>Text</type>
+    <length>32</length>
+    <required>false</required>
+    <externalId>false</externalId>
+    <trackTrending>false</trackTrending>
+    <unique>false</unique>
+</CustomField>

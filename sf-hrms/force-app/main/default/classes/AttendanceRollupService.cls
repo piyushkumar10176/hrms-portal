@@ -18,7 +18,19 @@
  * America/Los_Angeles while the business runs in Asia/Kolkata, so using
  * DateTime.date() here would file evening punches against the wrong day.
  */
-public with sharing class AttendanceRollupService {
+/**
+ * SHARING NOTE
+ *
+ * Derives records from raw data, so it must always see the complete set. It runs
+ * under whoever caused the trigger to fire, and one of those is the Salesforce
+ * Site guest user that Slack reaches: Salesforce forces guest users to private
+ * record access whatever the org-wide default says, so "with sharing" here meant
+ * querying the source data and finding none of it.
+ *
+ * That does not fail loudly. It computes a wrong answer from an empty input and
+ * writes it, which is worse than an error, so the complete view is not optional.
+ */
+public without sharing class AttendanceRollupService {
     private static final String CHECK_IN = 'Check-In';
     private static final String CHECK_OUT = 'Check-Out';
     private static final String STATUS_PRESENT = 'Present';

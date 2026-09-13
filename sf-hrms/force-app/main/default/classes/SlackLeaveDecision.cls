@@ -91,7 +91,7 @@ public inherited sharing class SlackLeaveDecision {
 
         return new Announcement(
             forApprover(request, actor, approving, isOverride),
-            forRequester(request, approving),
+            forRequester(request, actor, approving, isOverride),
             request.Employee__r?.Slack_User_Id__c,
             true
         );
@@ -115,17 +115,23 @@ public inherited sharing class SlackLeaveDecision {
      * own list still reads "Submitted" with a cancel button on it, and without
      * this they would have no way of learning otherwise until they asked again.
      */
-    private static String forRequester(Leave_Request__c request, Boolean approving) {
+    private static String forRequester(
+        Leave_Request__c request, Employee__c actor, Boolean approving, Boolean isOverride
+    ) {
         if (String.isBlank(request.Employee__r?.Slack_User_Id__c)) {
             return null;
         }
+        // Named, because "your leave was rejected" with nobody attached to it is
+        // the kind of message that sends somebody asking around all morning.
+        String decidedBy = 'by ' + SlackBlocks.escape(actor.Name) +
+            (isOverride ? ' (on behalf of your approver)' : '');
         return (approving
-            ? ':white_check_mark: Your leave has been *approved*.'
-            : ':x: Your leave request was *rejected*.') + '\n' + describe(request) +
+            ? ':white_check_mark: Your leave has been *approved* ' + decidedBy + '.'
+            : ':x: Your leave request was *rejected* ' + decidedBy + '.') + '\n' + describe(request) +
             (approving
                 ? ''
-                : '\nSpeak to your approver if you think that is wrong. You can apply again ' +
-                  'from the Home tab.');
+                : '\nSpeak to ' + SlackBlocks.escape(actor.Name) + ' if you think that is ' +
+                  'wrong. You can apply again from the Home tab.');
     }
 
     private static String describe(Leave_Request__c request) {
